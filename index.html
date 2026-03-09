@@ -9,11 +9,11 @@
     <script src="https://api-maps.yandex.ru/2.1/?lang=uz_UZ&apikey=784e6223-9556-4b82-8419-75691062064c" type="text/javascript"></script>
     <style>
         html, body, #map { width: 100%; height: 100%; padding: 0; margin: 0; }
-        #info { position: absolute; bottom: 20px; left: 10px; z-index: 100; background: white; padding: 10px; border-radius: 8px; font-family: sans-serif; box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
+        #info { position: absolute; bottom: 20px; left: 10px; right: 10px; z-index: 100; background: white; padding: 15px; border-radius: 12px; font-family: sans-serif; box-shadow: 0 4px 15px rgba(0,0,0,0.3); text-align: center; font-weight: bold; color: #333; }
     </style>
 </head>
 <body>
-    <div id="info">🚕 Taksi va 🔵 Siz</div>
+    <div id="info">Haydovchi va sizning manzilingiz aniqlanmoqda...</div>
     <div id="map"></div>
 
     <script type="text/javascript">
@@ -26,7 +26,8 @@
         ymaps.ready(init);
 
         function init(){
-            var myMap = new ymaps.Map("map", { center: [39.9469, 66.2625], zoom: 14 });
+            // Xaritani yaratish
+            var myMap = new ymaps.Map("map", { center: [39.9469, 66.2625], zoom: 14, controls: ['zoomControl'] });
 
             // 1. Haydovchi ikonkasi (Taksi)
             var driverMarker = new ymaps.Placemark([39.9469, 66.2625], { hintContent: 'Taksi' }, {
@@ -42,25 +43,54 @@
 
             myMap.geoObjects.add(driverMarker).add(clientMarker);
 
-            // 3. Mijozning real lokatsiyasini aniqlash va Firebase-ga yuborish
-            navigator.geolocation.watchPosition(function(position) {
-                const c_lat = position.coords.latitude;
-                const c_lon = position.coords.longitude;
-                const c_coords = [c_lat, c_lon];
-                
-                clientMarker.geometry.setCoordinates(c_coords);
-                db.ref('client_location').set({ lat: c_lat, lon: c_lon }); // Mijozni bazaga yozish
-            });
+            var multiRoute;
 
-            // 4. Haydovchini bazadan kuzatish
+            // 3. Marshrutni yangilash funksiyasi
+            function updateRoute(d_coords, c_coords) {
+                if (multiRoute) { myMap.geoObjects.remove(multiRoute); }
+
+                multiRoute = new ymaps.multiRouter.MultiRoute({
+                    referencePoints: [d_coords, c_coords],
+                    params: { routingMode: 'auto' }
+                }, {
+                    wayPointVisible: false,
+                    routeActiveStrokeWidth: 5,
+                    routeActiveStrokeColor: "#ffcc00" // Sariq yo'l
+                });
+
+                myMap.geoObjects.add(multiRoute);
+
+                // Masofani matn ko'rinishida chiqarish
+                multiRoute.model.events.add('requestsuccess', function() {
+                    var activeRoute = multiRoute.getActiveRoute();
+                    if (activeRoute) {
+                        document.getElementById('info').innerHTML = "🚕 Haydovchi sizdan <b>" + activeRoute.properties.get("distance").text + "</b> uzoqlikda";
+                    }
+                });
+            }
+
+            // 4. Ma'lumotlarni Firebase va GPS dan olish
+            let d_pos, c_pos;
+
             db.ref('driver_location').on('value', (snapshot) => {
                 const data = snapshot.val();
                 if (data) {
-                    const d_coords = [data.lat, data.lon];
-                    driverMarker.geometry.setCoordinates(d_coords);
+                    d_pos = [data.lat, data.lon];
+                    driverMarker.geometry.setCoordinates(d_pos);
+                    if (c_pos) updateRoute(d_pos, c_pos);
                 }
             });
+
+            navigator.geolocation.watchPosition(function(position) {
+                c_pos = [position.coords.latitude, position.coords.longitude];
+                clientMarker.geometry.setCoordinates(c_pos);
+                db.ref('client_location').set({ lat: c_pos[0], lon: c_pos[1] });
+                if (d_pos) updateRoute(d_pos, c_pos);
+            }, function(err) {
+                console.error("GPS ruxsat berilmadi");
+            }, { enableHighAccuracy: true });
         }
     </script>
 </body>
 </html>
+
