@@ -13,13 +13,11 @@
     </style>
 </head>
 <body>
-    <div id="info">Manzil aniqlanmoqda...</div>
+    <div id="info">Haydovchi va mijoz qidirilmoqda...</div>
     <div id="map"></div>
 
     <script type="text/javascript">
-        const firebaseConfig = {
-            databaseURL: "https://umut-taxi-default-rtdb.europe-west1.firebasedatabase.app/"
-        };
+        const firebaseConfig = { databaseURL: "https://umut-taxi-default-rtdb.europe-west1.firebasedatabase.app/" };
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
@@ -37,42 +35,53 @@
             var clientMarker = new ymaps.Placemark([39.9469, 66.2625], {}, { preset: 'islands#blueCircleDotIcon' });
             myMap.geoObjects.add(driverMarker).add(clientMarker);
 
-            var multiRoute;
+            var multiRoute = null;
 
-            function updateRoute(d_coords, c_coords) {
+            function updateRoute(d_pos, c_pos) {
                 if (multiRoute) { myMap.geoObjects.remove(multiRoute); }
+
                 multiRoute = new ymaps.multiRouter.MultiRoute({
-                    referencePoints: [d_coords, c_coords],
+                    referencePoints: [d_pos, c_pos],
                     params: { routingMode: 'auto' }
-                }, { wayPointVisible: false, routeActiveStrokeWidth: 5, routeActiveStrokeColor: "#ffcc00" });
+                }, {
+                    wayPointVisible: false,
+                    routeActiveStrokeWidth: 5,
+                    routeActiveStrokeColor: "#ffcc00"
+                });
+
                 myMap.geoObjects.add(multiRoute);
+
                 multiRoute.model.events.add('requestsuccess', function() {
                     var activeRoute = multiRoute.getActiveRoute();
                     if (activeRoute) {
-                        document.getElementById('info').innerHTML = "🚕 Masofa: <b>" + activeRoute.properties.get("distance").text + "</b>";
+                        var dist = activeRoute.properties.get("distance").text;
+                        var time = activeRoute.properties.get("duration").text;
+                        document.getElementById('info').innerHTML = "🚕 Masofa: <b>" + dist + "</b> | Kelish vaqti: <b>" + time + "</b>";
                     }
                 });
             }
 
-            // TEZKOR GPS ANIQLASH
-            navigator.geolocation.getCurrentPosition(function(position) {
-                let c_pos = [position.coords.latitude, position.coords.longitude];
-                clientMarker.geometry.setCoordinates(c_pos);
-                myMap.setCenter(c_pos, 14);
-                db.ref('client_location').set({ lat: c_pos[0], lon: c_pos[1] });
-                
-                // Haydovchini kutish
-                db.ref('driver_location').on('value', (snapshot) => {
-                    const data = snapshot.val();
-                    if (data) {
-                        let d_pos = [data.lat, data.lon];
-                        driverMarker.geometry.setCoordinates(d_pos);
-                        updateRoute(d_pos, c_pos);
-                    }
-                });
-            }, function(err) {
-                document.getElementById('info').innerText = "GPS ruxsat berilmadi!";
-            }, { enableHighAccuracy: true });
+            let driverData = null, clientData = null;
+
+            // Haydovchini kuzatish
+            db.ref('driver_location').on('value', (snap) => {
+                driverData = snap.val();
+                if (driverData) {
+                    let d_pos = [driverData.lat, driverData.lon];
+                    driverMarker.geometry.setCoordinates(d_pos);
+                    if (clientData) updateRoute(d_pos, [clientData.lat, clientData.lon]);
+                }
+            });
+
+            // Mijozni kuzatish
+            db.ref('client_location').on('value', (snap) => {
+                clientData = snap.val();
+                if (clientData) {
+                    let c_pos = [clientData.lat, clientData.lon];
+                    clientMarker.geometry.setCoordinates(c_pos);
+                    if (driverData) updateRoute([driverData.lat, driverData.lon], c_pos);
+                }
+            });
         }
     </script>
 </body>
