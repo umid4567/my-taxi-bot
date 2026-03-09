@@ -9,44 +9,59 @@
     <script src="https://api-maps.yandex.ru/2.1/?lang=uz_UZ&apikey=784e6223-9556-4b82-8419-75691062064c" type="text/javascript"></script>
     <style>
         html, body, #map { width: 100%; height: 100%; padding: 0; margin: 0; }
-        #info { position: absolute; bottom: 20px; left: 10px; right: 10px; z-index: 100; background: white; padding: 15px; border-radius: 12px; font-family: sans-serif; box-shadow: 0 4px 15px rgba(0,0,0,0.3); text-align: center; font-weight: bold; }
+        #info { position: absolute; bottom: 20px; left: 10px; right: 10px; z-index: 100; background: white; padding: 15px; border-radius: 12px; font-family: sans-serif; box-shadow: 0 4px 15px rgba(0,0,0,0.3); text-align: center; font-weight: bold; font-size: 14px; }
     </style>
 </head>
 <body>
-    <div id="info">Haydovchi va mijoz qidirilmoqda...</div>
+    <div id="info">📡 Ma'lumotlar bazasiga ulanmoqda...</div>
     <div id="map"></div>
 
     <script type="text/javascript">
-        const firebaseConfig = { databaseURL: "https://umut-taxi-default-rtdb.europe-west1.firebasedatabase.app/" };
+        // Firebase Sozlamalari (Europe-West1 uchun maxsus)
+        const firebaseConfig = {
+            databaseURL: "https://umut-taxi-default-rtdb.europe-west1.firebasedatabase.app/"
+        };
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
         ymaps.ready(init);
 
         function init(){
-            var myMap = new ymaps.Map("map", { center: [39.9469, 66.2625], zoom: 14, controls: ['zoomControl'] });
-
-            var driverMarker = new ymaps.Placemark([39.9469, 66.2625], {}, {
-                iconLayout: 'default#image',
-                iconImageHref: 'https://cdn-icons-png.flaticon.com/512/3448/3448339.png',
-                iconImageSize: [36, 36], iconImageOffset: [-18, -18]
+            var myMap = new ymaps.Map("map", {
+                center: [39.9469, 66.2625],
+                zoom: 14,
+                controls: ['zoomControl', 'typeSelector']
             });
 
-            var clientMarker = new ymaps.Placemark([39.9469, 66.2625], {}, { preset: 'islands#blueCircleDotIcon' });
+            // Haydovchi markeri (Taksi)
+            var driverMarker = new ymaps.Placemark([39.9469, 66.2625], { balloonContent: 'Haydovchi' }, {
+                iconLayout: 'default#image',
+                iconImageHref: 'https://cdn-icons-png.flaticon.com/512/3448/3448339.png',
+                iconImageSize: [40, 40], iconImageOffset: [-20, -20]
+            });
+
+            // Mijoz markeri (Nuqta)
+            var clientMarker = new ymaps.Placemark([39.9469, 66.2625], { balloonContent: 'Mijoz' }, {
+                preset: 'islands#blueCircleDotIconWithCaption',
+                iconColor: '#007bff'
+            });
+
             myMap.geoObjects.add(driverMarker).add(clientMarker);
 
             var multiRoute = null;
 
-            function updateRoute(d_pos, c_pos) {
+            // Marshrutni chizish funksiyasi
+            function drawRoute(d_lat, d_lon, c_lat, c_lon) {
                 if (multiRoute) { myMap.geoObjects.remove(multiRoute); }
 
                 multiRoute = new ymaps.multiRouter.MultiRoute({
-                    referencePoints: [d_pos, c_pos],
+                    referencePoints: [[d_lat, d_lon], [c_lat, c_lon]],
                     params: { routingMode: 'auto' }
                 }, {
                     wayPointVisible: false,
-                    routeActiveStrokeWidth: 5,
-                    routeActiveStrokeColor: "#ffcc00"
+                    routeActiveStrokeWidth: 6,
+                    routeActiveStrokeColor: "#ffcc00", // Sariq marshrut
+                    routeActiveStrokeStyle: 'solid'
                 });
 
                 myMap.geoObjects.add(multiRoute);
@@ -61,25 +76,27 @@
                 });
             }
 
-            let driverData = null, clientData = null;
+            let d_pos = null, c_pos = null;
 
-            // Haydovchini kuzatish
+            // 1. Haydovchini eshitish
             db.ref('driver_location').on('value', (snap) => {
-                driverData = snap.val();
-                if (driverData) {
-                    let d_pos = [driverData.lat, driverData.lon];
-                    driverMarker.geometry.setCoordinates(d_pos);
-                    if (clientData) updateRoute(d_pos, [clientData.lat, clientData.lon]);
+                const data = snap.val();
+                if (data && data.lat) {
+                    d_pos = data;
+                    driverMarker.geometry.setCoordinates([data.lat, data.lon]);
+                    if (c_pos) drawRoute(d_pos.lat, d_pos.lon, c_pos.lat, c_pos.lon);
+                    else document.getElementById('info').innerText = "🚕 Haydovchi topildi. Mijoz kutilmoqda...";
                 }
             });
 
-            // Mijozni kuzatish
+            // 2. Mijozni eshitish
             db.ref('client_location').on('value', (snap) => {
-                clientData = snap.val();
-                if (clientData) {
-                    let c_pos = [clientData.lat, clientData.lon];
-                    clientMarker.geometry.setCoordinates(c_pos);
-                    if (driverData) updateRoute([driverData.lat, driverData.lon], c_pos);
+                const data = snap.val();
+                if (data && data.lat) {
+                    c_pos = data;
+                    clientMarker.geometry.setCoordinates([data.lat, data.lon]);
+                    if (d_pos) drawRoute(d_pos.lat, d_pos.lon, c_pos.lat, c_pos.lon);
+                    else document.getElementById('info').innerText = "🔵 Mijoz topildi. Haydovchi kutilmoqda...";
                 }
             });
         }
