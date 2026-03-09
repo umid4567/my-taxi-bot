@@ -1,37 +1,22 @@
 <!DOCTYPE html>
 <html lang="uz">
 <head>
-    <title>Umut Taxi - Live Tracking</title>
+    <title>Umut Taxi - Live</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
-    
     <script src="https://api-maps.yandex.ru/2.1/?lang=uz_UZ&apikey=784e6223-9556-4b82-8419-75691062064c" type="text/javascript"></script>
-    
     <style>
-        html, body, #map { width: 100%; height: 100%; padding: 0; margin: 0; background-color: #f0f0f0; }
-        #status-bar { 
-            position: absolute; top: 10px; left: 10px; z-index: 1000; 
-            background: white; padding: 10px; border-radius: 8px; 
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1); font-family: sans-serif;
-            border-left: 5px solid #2ecc71;
-        }
-        .driver-info { font-weight: bold; color: #2c3e50; }
+        html, body, #map { width: 100%; height: 100%; padding: 0; margin: 0; }
+        #info { position: absolute; bottom: 20px; left: 10px; z-index: 100; background: white; padding: 10px; border-radius: 8px; font-family: sans-serif; box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
     </style>
 </head>
 <body>
-
-    <div id="status-bar">
-        <div class="driver-info">🚕 Umut Taxi</div>
-        <div id="status-text">Haydovchi qidirilmoqda...</div>
-    </div>
-
+    <div id="info">🚕 Taksi va 🔵 Siz</div>
     <div id="map"></div>
 
     <script type="text/javascript">
-        // 1. Firebase Sozlamalari
         const firebaseConfig = {
             databaseURL: "https://umut-taxi-default-rtdb.europe-west1.firebasedatabase.app/"
         };
@@ -40,41 +25,40 @@
 
         ymaps.ready(init);
 
-        function init() {
-            // Xaritani yaratish (Markaz: Kattaqo'rg'on)
-            var myMap = new ymaps.Map("map", {
-                center: [39.9469, 66.2625],
-                zoom: 16,
-                controls: ['zoomControl', 'fullscreenControl']
+        function init(){
+            var myMap = new ymaps.Map("map", { center: [39.9469, 66.2625], zoom: 14 });
+
+            // 1. Haydovchi ikonkasi (Taksi)
+            var driverMarker = new ymaps.Placemark([39.9469, 66.2625], { hintContent: 'Taksi' }, {
+                iconLayout: 'default#image',
+                iconImageHref: 'https://cdn-icons-png.flaticon.com/512/3448/3448339.png',
+                iconImageSize: [36, 36], iconImageOffset: [-18, -18]
             });
 
-            // Haydovchi mashina belgisi
-            var driverMarker = new ymaps.Placemark([39.9469, 66.2625], {
-                balloonContent: 'Haydovchi: Umut'
-            }, {
-                preset: 'islands#darkGreenAutoIcon',
-                iconColor: '#1ed760'
+            // 2. Mijoz ikonkasi (Ko'k nuqta)
+            var clientMarker = new ymaps.Placemark([39.9469, 66.2625], { hintContent: 'Siz' }, {
+                preset: 'islands#blueCircleDotIconWithCaption'
             });
 
-            myMap.geoObjects.add(driverMarker);
+            myMap.geoObjects.add(driverMarker).add(clientMarker);
 
-            // 2. Firebase-dan real vaqtda ma'lumot olish
+            // 3. Mijozning real lokatsiyasini aniqlash va Firebase-ga yuborish
+            navigator.geolocation.watchPosition(function(position) {
+                const c_lat = position.coords.latitude;
+                const c_lon = position.coords.longitude;
+                const c_coords = [c_lat, c_lon];
+                
+                clientMarker.geometry.setCoordinates(c_coords);
+                db.ref('client_location').set({ lat: c_lat, lon: c_lon }); // Mijozni bazaga yozish
+            });
+
+            // 4. Haydovchini bazadan kuzatish
             db.ref('driver_location').on('value', (snapshot) => {
                 const data = snapshot.val();
-                if (data && data.lat && data.lon) {
-                    const coords = [data.lat, data.lon];
-
-                    // Mashina joyini o'zgartirish
-                    driverMarker.geometry.setCoordinates(coords);
-
-                    // Xaritani sekin siljitish
-                    myMap.panTo(coords, { flying: true, duration: 1000 });
-
-                    document.getElementById('status-text').innerText = "Haydovchi yo'lda...";
+                if (data) {
+                    const d_coords = [data.lat, data.lon];
+                    driverMarker.geometry.setCoordinates(d_coords);
                 }
-            }, (error) => {
-                document.getElementById('status-text').innerText = "Baza bilan aloqa yo'q";
-                console.error(error);
             });
         }
     </script>
