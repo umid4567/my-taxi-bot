@@ -37,31 +37,22 @@
         }
     }
 
-    function startTracking() {
-        if (navigator.geolocation) {
-            navigator.geolocation.watchPosition(function(position) {
-                const lat = position.coords.latitude;
-                const lon = position.coords.longitude;
+        function initUser() {
+        // Telegram WebApp ma'lumotlarini tekshirishning barcha yo'llari
+        const user = tg.initDataUnsafe?.user || window.Telegram?.WebApp?.initDataUnsafe?.user;
 
-                // Faqat ID aniq bo'lsa bazaga yozamiz
-                if (userId !== "unknown") {
-                    database.ref('driver_location/' + userId).set({
-                        lat: lat,
-                        lon: lon,
-                        last_update: new Date().getTime()
-                    });
-                }
-
-                document.getElementById('coords').innerHTML = "📍 " + lat.toFixed(5) + ", " + lon.toFixed(5);
-            }, function(error) {
-                document.getElementById('status').innerHTML = "🔴 GPS ruxsat bermadi";
-            }, {
-                enableHighAccuracy: true,
-                maximumAge: 0,
-                timeout: 10000
-            });
+        if (user && user.id) {
+            userId = user.id;
+            document.getElementById('status').innerHTML = "🟢 Liniyadasiz (ID: " + userId + ")";
+            document.getElementById('status').style.color = "#00FF00"; // Yashil rang
+            startTracking();
+        } else {
+            // Agar baribir topilmasa, test uchun ID-ni qo'lda yozib ko'ramiz (faqat tekshirish uchun)
+            document.getElementById('status').innerHTML = "🟡 Telegram ma'lumotlari kutilmoqda...";
+            setTimeout(initUser, 1000);
         }
     }
+
 
     window.onload = initUser;
 
