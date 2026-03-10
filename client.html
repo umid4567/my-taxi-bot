@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AXI TAXI - Mijoz xaritasi</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://api-maps.yandex.ru/2.1/?lang=uz_UZ&apikey=f3032742-990a-427c-9407-7393430f89d3" type="text/javascript"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+</head>
+<body style="margin: 0; padding: 0;">
+    <div id="map" style="width: 100vw; height: 100vh; background: #eee;"></div>
+    
+    <script>
+        // Firebase sozlamalari
+        const firebaseConfig = {
+            databaseURL: "https://umut-taxi-default-rtdb.europe-west1.firebasedatabase.app/"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
+        ymaps.ready(init);
+
+        function init() {
+            // Xaritani markazlashtirish (Kattaqo'rg'on)
+            let myMap = new ymaps.Map("map", {
+                center: [39.9469, 66.2625],
+                zoom: 14,
+                controls: ['zoomControl', 'fullscreenControl']
+            });
+
+            let driverMarkers = {}; // Hamma haydovchilarni saqlash uchun
+
+            // Bazadan haydovchilar lokatsiyasini real vaqtda olish
+            database.ref('driver_location').on('value', (snapshot) => {
+                const drivers = snapshot.val();
+                if (!drivers) return;
+
+                for (let id in drivers) {
+                    const loc = drivers[id];
+                    
+                    // Agar haydovchi xaritada bo'lsa, joyini yangilaymiz
+                    if (driverMarkers[id]) {
+                        driverMarkers[id].geometry.setCoordinates([loc.lat, loc.lon]);
+                    } else {
+                        // Agar yangi haydovchi bo'lsa, belgi qo'shamiz
+                        driverMarkers[id] = new ymaps.Placemark([loc.lat, loc.lon], {
+                            hintContent: 'Taksi kelmoqda',
+                            balloonContent: 'Haydovchi liniyada'
+                        }, {
+                            preset: 'islands#autoIcon',
+                            iconColor: '#ff0000'
+                        });
+                        myMap.geoObjects.add(driverMarkers[id]);
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>
+
