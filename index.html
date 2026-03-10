@@ -15,7 +15,7 @@
 
     <script>
     const tg = window.Telegram.WebApp;
-    tg.expand(); // Oynani kattalashtirish
+    tg.expand();
 
     const firebaseConfig = {
         databaseURL: "https://umut-taxi-default-rtdb.europe-west1.firebasedatabase.app/"
@@ -23,33 +23,38 @@
     firebase.initializeApp(firebaseConfig);
     const database = firebase.database();
 
-    // ID-ni olishni mana bunday aniqlashtiramiz
     let userId = "unknown";
-    if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
-        userId = tg.initDataUnsafe.user.id;
+
+    // ID-ni aniqlash funksiyasi (kutish bilan)
+    function initUser() {
+        if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
+            userId = tg.initDataUnsafe.user.id;
+            document.getElementById('status').innerHTML = "🟢 Liniyadasiz (ID: " + userId + ")";
+            startTracking(); // ID topilgandan keyin lokatsiyani boshlaymiz
+        } else {
+            document.getElementById('status').innerHTML = "🟡 Telegram bilan bog'lanilmoqda...";
+            setTimeout(initUser, 1000); // 1 soniyadan keyin qayta urinib ko'radi
+        }
     }
 
-    function updateLocation() {
+    function startTracking() {
         if (navigator.geolocation) {
             navigator.geolocation.watchPosition(function(position) {
                 const lat = position.coords.latitude;
                 const lon = position.coords.longitude;
 
-                // Endi lokatsiya aynan haydovchi ID-si bilan yoziladi
+                // Faqat ID aniq bo'lsa bazaga yozamiz
                 if (userId !== "unknown") {
                     database.ref('driver_location/' + userId).set({
                         lat: lat,
                         lon: lon,
                         last_update: new Date().getTime()
                     });
-                    document.getElementById('status').innerHTML = "🟢 Liniyadasiz (ID: " + userId + ")";
-                } else {
-                    document.getElementById('status').innerHTML = "🔴 Xato: Telegram ID aniqlanmadi";
                 }
 
                 document.getElementById('coords').innerHTML = "📍 " + lat.toFixed(5) + ", " + lon.toFixed(5);
             }, function(error) {
-                document.getElementById('status').innerHTML = "🔴 GPS ruxsat berilmadi";
+                document.getElementById('status').innerHTML = "🔴 GPS ruxsat bermadi";
             }, {
                 enableHighAccuracy: true,
                 maximumAge: 0,
@@ -57,7 +62,9 @@
             });
         }
     }
-    window.onload = updateLocation;
+
+    window.onload = initUser;
+
 </script>
 
 </body>
