@@ -26,20 +26,25 @@
 
     let userId = "unknown";
 
-    function initApp() {
-        // Telegramdan haydovchi ID-sini oladi
+        function initApp() {
+        // Telegramdan ma'lumot olishga harakat qilamiz
         const user = tg.initDataUnsafe?.user;
         
         if (user && user.id) {
             userId = user.id;
-            const statusEle = document.getElementById('status');
-            statusEle.innerHTML = "🟢 Liniyadasiz (ID: " + userId + ")";
-            statusEle.style.color = "#00FF00";
-            startGPS();
         } else {
-            setTimeout(initApp, 1000);
+            // AGAR TELEGRAM ID BERMASA, TEST REJIMIDA YONADI
+            userId = "haydovchi_" + Math.floor(Math.random() * 1000);
         }
+
+        const statusEle = document.getElementById('status');
+        statusEle.innerHTML = "🟢 Liniyadasiz (ID: " + userId + ")";
+        statusEle.style.color = "#00FF00";
+        
+        // GPS-ni darrov yoqamiz
+        startGPS();
     }
+
 
     function startGPS() {
         if (navigator.geolocation) {
