@@ -14,47 +14,51 @@
     <div id="coords" style="font-size: 14px; color: #FFD700; font-weight: bold; margin-top: 10px;"></div>
 
     <script>
-        const tg = window.Telegram.WebApp;
-        tg.expand(); // Oynani to'liq ochish
+    const tg = window.Telegram.WebApp;
+    tg.expand(); // Oynani kattalashtirish
 
-        const firebaseConfig = {
-            databaseURL: "https://umut-taxi-default-rtdb.europe-west1.firebasedatabase.app/"
-        };
-        firebase.initializeApp(firebaseConfig);
-        const database = firebase.database();
+    const firebaseConfig = {
+        databaseURL: "https://umut-taxi-default-rtdb.europe-west1.firebasedatabase.app/"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const database = firebase.database();
 
-        // Har bir haydovchini o'z ID-si bilan aniqlash
-        const HAYDOVCHI_ID = tg.initDataUnsafe.user ? tg.initDataUnsafe.user.id : "unknown";
+    // ID-ni olishni mana bunday aniqlashtiramiz
+    let userId = "unknown";
+    if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
+        userId = tg.initDataUnsafe.user.id;
+    }
 
-        function updateLocation() {
-            if (navigator.geolocation) {
-                navigator.geolocation.watchPosition(function(position) {
-                    const lat = position.coords.latitude;
-                    const lon = position.coords.longitude;
+    function updateLocation() {
+        if (navigator.geolocation) {
+            navigator.geolocation.watchPosition(function(position) {
+                const lat = position.coords.latitude;
+                const lon = position.coords.longitude;
 
-                    // MUHIM: Har bir haydovchi uchun alohida yo'l (driver_location/ID)
-                    database.ref('driver_location/' + HAYDOVCHI_ID).set({
+                // Endi lokatsiya aynan haydovchi ID-si bilan yoziladi
+                if (userId !== "unknown") {
+                    database.ref('driver_location/' + userId).set({
                         lat: lat,
                         lon: lon,
                         last_update: new Date().getTime()
                     });
+                    document.getElementById('status').innerHTML = "🟢 Liniyadasiz (ID: " + userId + ")";
+                } else {
+                    document.getElementById('status').innerHTML = "🔴 Xato: Telegram ID aniqlanmadi";
+                }
 
-                    document.getElementById('status').innerHTML = "🟢 Liniyadasiz (Avtomat yangilanmoqda)";
-                    document.getElementById('coords').innerHTML = "📍 " + lat.toFixed(5) + ", " + lon.toFixed(5);
-                    
-                }, function(error) {
-                    document.getElementById('status').innerHTML = "🔴 GPS o'chiq yoki ruxsat berilmadi";
-                }, {
-                    enableHighAccuracy: true,
-                    maximumAge: 0,
-                    timeout: 10000
-                });
-            } else {
-                document.getElementById('status').innerHTML = "🔴 GPS qo'llab-quvvatlanmaydi";
-            }
+                document.getElementById('coords').innerHTML = "📍 " + lat.toFixed(5) + ", " + lon.toFixed(5);
+            }, function(error) {
+                document.getElementById('status').innerHTML = "🔴 GPS ruxsat berilmadi";
+            }, {
+                enableHighAccuracy: true,
+                maximumAge: 0,
+                timeout: 10000
+            });
         }
+    }
+    window.onload = updateLocation;
+</script>
 
-        window.onload = updateLocation;
-    </script>
 </body>
 </html>
