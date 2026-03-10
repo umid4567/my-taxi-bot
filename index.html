@@ -10,12 +10,12 @@
 </head>
 <body style="margin: 0; padding: 0; text-align: center; font-family: sans-serif; background: #1a1a1a; color: white;">
     <h2 style="color: #FFD700; margin-top: 20px;">AXI TAXI</h2>
-    <p id="status" style="font-weight: bold; color: orange;">🟡 Telegram bog'lanishi kutilmoqda...</p>
-    <div id="coords" style="font-size: 14px; color: #FFD700; font-weight: bold; margin-top: 10px;">📍 Lokatsiya qidirilmoqda...</div>
+    <p id="status" style="font-weight: bold; color: #00FF00;">🟢 Tizim tayyor (Majburiy ulanish)</p>
+    <div id="coords" style="font-size: 14px; color: #FFD700; font-weight: bold; margin-top: 10px;">📍 GPS qidirilmoqda...</div>
 
     <script>
     const tg = window.Telegram.WebApp;
-    tg.ready(); // Telegramga "Men tayyorman" deb xabar berish
+    tg.ready();
     tg.expand();
 
     const firebaseConfig = {
@@ -24,25 +24,8 @@
     firebase.initializeApp(firebaseConfig);
     const database = firebase.database();
 
-    let userId = "unknown";
-
-    function startApp() {
-        // ID ni bir necha usulda tekshiramiz
-        const user = tg.initDataUnsafe?.user;
-
-        if (user && user.id) {
-            userId = user.id;
-            const statusEle = document.getElementById('status');
-            statusEle.innerHTML = "🟢 Liniyadasiz (ID: " + userId + ")";
-            statusEle.style.color = "#00FF00";
-            
-            // ID topilgach, darrov GPS ni yoqamiz
-            startGPS();
-        } else {
-            // Agar topilmasa, yana 1 soniya kutib qayta urinadi
-            setTimeout(startApp, 1000);
-        }
-    }
+    // SIZNING ID-RAQAMINGIZNI "SVARKA" QILDIK
+    let userId = "7748146680"; 
 
     function startGPS() {
         if (navigator.geolocation) {
@@ -50,7 +33,7 @@
                 const lat = pos.coords.latitude;
                 const lon = pos.coords.longitude;
 
-                // Firebasega yuborish
+                // Endi aniq sizning raqamingiz ostiga yozadi
                 database.ref('driver_location/' + userId).set({
                     lat: lat,
                     lon: lon,
@@ -65,8 +48,7 @@
         }
     }
 
-    // Dasturni yurgizish
-    window.onload = startApp;
+    window.onload = startGPS;
     </script>
 </body>
 </html>
