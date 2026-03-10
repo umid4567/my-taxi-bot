@@ -27,7 +27,7 @@
     let userId = "unknown";
 
     function initApp() {
-        // UNIVERSAL: Telegramdan ID-ni avtomatik oladi
+        // Telegramdan haydovchi ID-sini oladi
         const user = tg.initDataUnsafe?.user;
         
         if (user && user.id) {
@@ -37,7 +37,6 @@
             statusEle.style.color = "#00FF00";
             startGPS();
         } else {
-            // Agar topilmasa, yana kutadi
             setTimeout(initApp, 1000);
         }
     }
@@ -48,7 +47,7 @@
                 const lat = pos.coords.latitude;
                 const lon = pos.coords.longitude;
 
-                // Har bir haydovchi o'z ID-si bilan bazaga yoziladi
+                // Bazaga har bir haydovchi ID-si bilan lokatsiya yuboriladi
                 database.ref('driver_location/' + userId).set({
                     lat: lat,
                     lon: lon,
@@ -57,7 +56,7 @@
 
                 document.getElementById('coords').innerHTML = "📍 " + lat.toFixed(5) + ", " + lon.toFixed(5);
             }, function(err) {
-                document.getElementById('status').innerHTML = "🔴 GPS ruxsat bermadi!";
+                document.getElementById('status').innerHTML = "🔴 GPS-ga ruxsat bering!";
                 document.getElementById('status').style.color = "red";
             }, { enableHighAccuracy: true });
         }
