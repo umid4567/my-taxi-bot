@@ -10,11 +10,12 @@
 </head>
 <body style="margin: 0; padding: 0; text-align: center; font-family: sans-serif; background: #1a1a1a; color: white;">
     <h2 style="color: #FFD700; margin-top: 20px;">AXI TAXI</h2>
-    <p id="status" style="font-weight: bold;">🟡 Sun'iy yo'ldosh qidirilmoqda...</p>
-    <div id="coords" style="font-size: 14px; color: #FFD700; font-weight: bold; margin-top: 10px;"></div>
+    <p id="status" style="font-weight: bold; color: orange;">🟡 Telegram bog'lanishi kutilmoqda...</p>
+    <div id="coords" style="font-size: 14px; color: #FFD700; font-weight: bold; margin-top: 10px;">📍 Lokatsiya qidirilmoqda...</div>
 
     <script>
     const tg = window.Telegram.WebApp;
+    tg.ready(); // Telegramga "Men tayyorman" deb xabar berish
     tg.expand();
 
     const firebaseConfig = {
@@ -25,51 +26,47 @@
 
     let userId = "unknown";
 
-    // 1. Foydalanuvchini aniqlash (Yashil chiroq yoqish)
-    function initUser() {
-        const user = tg.initDataUnsafe?.user || window.Telegram?.WebApp?.initDataUnsafe?.user;
+    function startApp() {
+        // ID ni bir necha usulda tekshiramiz
+        const user = tg.initDataUnsafe?.user;
 
         if (user && user.id) {
             userId = user.id;
-            document.getElementById('status').innerHTML = "🟢 Liniyadasiz (ID: " + userId + ")";
-            document.getElementById('status').style.color = "#00FF00";
-            startTracking(); // Mana bu funksiya endi pastda bor!
+            const statusEle = document.getElementById('status');
+            statusEle.innerHTML = "🟢 Liniyadasiz (ID: " + userId + ")";
+            statusEle.style.color = "#00FF00";
+            
+            // ID topilgach, darrov GPS ni yoqamiz
+            startGPS();
         } else {
-            document.getElementById('status').innerHTML = "🟡 Telegram ma'lumotlari kutilmoqda...";
-            setTimeout(initUser, 1000);
+            // Agar topilmasa, yana 1 soniya kutib qayta urinadi
+            setTimeout(startApp, 1000);
         }
     }
 
-    // 2. LOKATSIYANI HAYDASH (Eng muhim qismi)
-    function startTracking() {
+    function startGPS() {
         if (navigator.geolocation) {
-            navigator.geolocation.watchPosition(function(position) {
-                const lat = position.coords.latitude;
-                const lon = position.coords.longitude;
+            navigator.geolocation.watchPosition(function(pos) {
+                const lat = pos.coords.latitude;
+                const lon = pos.coords.longitude;
 
-                // Firebase'ga yuborish
-                if (userId !== "unknown") {
-                    database.ref('driver_location/' + userId).set({
-                        lat: lat,
-                        lon: lon,
-                        last_update: new Date().getTime()
-                    });
-                }
+                // Firebasega yuborish
+                database.ref('driver_location/' + userId).set({
+                    lat: lat,
+                    lon: lon,
+                    last_update: Date.now()
+                });
 
                 document.getElementById('coords').innerHTML = "📍 " + lat.toFixed(5) + ", " + lon.toFixed(5);
-            }, function(error) {
-                document.getElementById('status').innerHTML = "🔴 GPS ruxsat bermadi";
-            }, {
-                enableHighAccuracy: true,
-                maximumAge: 0,
-                timeout: 10000
-            });
-        } else {
-            document.getElementById('status').innerHTML = "🔴 Brauzer GPS-ni qo'llab-quvvatlamaydi";
+            }, function(err) {
+                document.getElementById('status').innerHTML = "🔴 GPS ruxsat bermadi!";
+                document.getElementById('status').style.color = "red";
+            }, { enableHighAccuracy: true });
         }
     }
 
-    window.onload = initUser;
+    // Dasturni yurgizish
+    window.onload = startApp;
     </script>
 </body>
 </html>
