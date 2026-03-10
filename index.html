@@ -10,7 +10,7 @@
 </head>
 <body style="margin: 0; padding: 0; text-align: center; font-family: sans-serif; background: #1a1a1a; color: white;">
     <h2 style="color: #FFD700; margin-top: 20px;">AXI TAXI</h2>
-    <p id="status">Sun'iy yo'ldosh qidirilmoqda...</p>
+    <p id="status" style="font-weight: bold;">🟡 Sun'iy yo'ldosh qidirilmoqda...</p>
     <div id="coords" style="font-size: 14px; color: #FFD700; font-weight: bold; margin-top: 10px;"></div>
 
     <script>
@@ -25,38 +25,51 @@
 
     let userId = "unknown";
 
-    // ID-ni aniqlash funksiyasi (kutish bilan)
+    // 1. Foydalanuvchini aniqlash (Yashil chiroq yoqish)
     function initUser() {
-        if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
-            userId = tg.initDataUnsafe.user.id;
-            document.getElementById('status').innerHTML = "🟢 Liniyadasiz (ID: " + userId + ")";
-            startTracking(); // ID topilgandan keyin lokatsiyani boshlaymiz
-        } else {
-            document.getElementById('status').innerHTML = "🟡 Telegram bilan bog'lanilmoqda...";
-            setTimeout(initUser, 1000); // 1 soniyadan keyin qayta urinib ko'radi
-        }
-    }
-
-        function initUser() {
-        // Telegram WebApp ma'lumotlarini tekshirishning barcha yo'llari
         const user = tg.initDataUnsafe?.user || window.Telegram?.WebApp?.initDataUnsafe?.user;
 
         if (user && user.id) {
             userId = user.id;
             document.getElementById('status').innerHTML = "🟢 Liniyadasiz (ID: " + userId + ")";
-            document.getElementById('status').style.color = "#00FF00"; // Yashil rang
-            startTracking();
+            document.getElementById('status').style.color = "#00FF00";
+            startTracking(); // Mana bu funksiya endi pastda bor!
         } else {
-            // Agar baribir topilmasa, test uchun ID-ni qo'lda yozib ko'ramiz (faqat tekshirish uchun)
             document.getElementById('status').innerHTML = "🟡 Telegram ma'lumotlari kutilmoqda...";
             setTimeout(initUser, 1000);
         }
     }
 
+    // 2. LOKATSIYANI HAYDASH (Eng muhim qismi)
+    function startTracking() {
+        if (navigator.geolocation) {
+            navigator.geolocation.watchPosition(function(position) {
+                const lat = position.coords.latitude;
+                const lon = position.coords.longitude;
+
+                // Firebase'ga yuborish
+                if (userId !== "unknown") {
+                    database.ref('driver_location/' + userId).set({
+                        lat: lat,
+                        lon: lon,
+                        last_update: new Date().getTime()
+                    });
+                }
+
+                document.getElementById('coords').innerHTML = "📍 " + lat.toFixed(5) + ", " + lon.toFixed(5);
+            }, function(error) {
+                document.getElementById('status').innerHTML = "🔴 GPS ruxsat bermadi";
+            }, {
+                enableHighAccuracy: true,
+                maximumAge: 0,
+                timeout: 10000
+            });
+        } else {
+            document.getElementById('status').innerHTML = "🔴 Brauzer GPS-ni qo'llab-quvvatlamaydi";
+        }
+    }
 
     window.onload = initUser;
-
-</script>
-
+    </script>
 </body>
 </html>
