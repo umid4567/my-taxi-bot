@@ -10,7 +10,7 @@
 </head>
 <body style="margin: 0; padding: 0; text-align: center; font-family: sans-serif; background: #1a1a1a; color: white;">
     <h2 style="color: #FFD700; margin-top: 20px;">AXI TAXI</h2>
-    <p id="status" style="font-weight: bold; color: #00FF00;">🟢 Tizim tayyor (Majburiy ulanish)</p>
+    <p id="status" style="font-weight: bold; color: orange;">🟡 Tizim kutilmoqda...</p>
     <div id="coords" style="font-size: 14px; color: #FFD700; font-weight: bold; margin-top: 10px;">📍 GPS qidirilmoqda...</div>
 
     <script>
@@ -24,8 +24,23 @@
     firebase.initializeApp(firebaseConfig);
     const database = firebase.database();
 
-    // SIZNING ID-RAQAMINGIZNI "SVARKA" QILDIK
-    let userId = "7748146680"; 
+    let userId = "unknown";
+
+    function initApp() {
+        // UNIVERSAL: Telegramdan ID-ni avtomatik oladi
+        const user = tg.initDataUnsafe?.user;
+        
+        if (user && user.id) {
+            userId = user.id;
+            const statusEle = document.getElementById('status');
+            statusEle.innerHTML = "🟢 Liniyadasiz (ID: " + userId + ")";
+            statusEle.style.color = "#00FF00";
+            startGPS();
+        } else {
+            // Agar topilmasa, yana kutadi
+            setTimeout(initApp, 1000);
+        }
+    }
 
     function startGPS() {
         if (navigator.geolocation) {
@@ -33,7 +48,7 @@
                 const lat = pos.coords.latitude;
                 const lon = pos.coords.longitude;
 
-                // Endi aniq sizning raqamingiz ostiga yozadi
+                // Har bir haydovchi o'z ID-si bilan bazaga yoziladi
                 database.ref('driver_location/' + userId).set({
                     lat: lat,
                     lon: lon,
@@ -48,7 +63,7 @@
         }
     }
 
-    window.onload = startGPS;
+    window.onload = initApp;
     </script>
 </body>
 </html>
