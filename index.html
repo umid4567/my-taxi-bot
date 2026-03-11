@@ -40,10 +40,10 @@
     const database = firebase.database();
 
     let userId = "unknown";
-    let myMap, multiRoute;
+    let myMap, multiRoute, driverMarker;
     let userLat, userLon;
+    let routeCreated = false;
 
-    // Botdan kelayotgan mijoz koordinatalari
     const urlParams = new URLSearchParams(window.location.search);
     const clientLat = urlParams.get('clat');
     const clientLon = urlParams.get('clon');
@@ -54,10 +54,17 @@
 
         ymaps.ready(function () {
             myMap = new ymaps.Map("map", {
-                center: [39.997, 65.924], // Kattaqo'rg'on
+                center: [39.997, 65.924], 
                 zoom: 15,
                 controls: ['zoomControl', 'geolocationControl']
             });
+            
+            // Haydovchi metkasini yaratamiz
+            driverMarker = new ymaps.Placemark([0,0], {}, {
+                preset: 'islands#blueAutoCircleIcon'
+            });
+            myMap.geoObjects.add(driverMarker);
+            
             startGPS();
         });
     }
@@ -68,7 +75,6 @@
                 userLat = pos.coords.latitude;
                 userLon = pos.coords.longitude;
 
-                // Bazaga lokatsiyani yozish
                 database.ref('driver_location/' + userId).update({
                     lat: userLat,
                     lon: userLon,
@@ -76,20 +82,31 @@
                 });
 
                 document.getElementById('coords').innerHTML = "📍 Siz: " + userLat.toFixed(5) + ", " + userLon.toFixed(5);
+                
+                // Haydovchi nuqtasini harakatlantiramiz
+                if (driverMarker) {
+                    driverMarker.geometry.setCoordinates([userLat, userLon]);
+                }
 
                 if (clientLat && clientLon) {
-                    document.getElementById('status').innerHTML = "🚕 Mijozga yo'nalish chizildi";
-                    document.getElementById('status').style.color = "#00FF00";
-                    drawRoute(userLat, userLon, clientLat, clientLon);
+                    if (!routeCreated) {
+                        document.getElementById('status').innerHTML = "🚕 Yo'nalish chizildi";
+                        document.getElementById('status').style.color = "#00FF00";
+                        drawRoute(userLat, userLon, clientLat, clientLon);
+                        routeCreated = true; 
+                    }
                 } else {
-                    document.getElementById('status').innerHTML = "🟢 Liniyadasiz, buyurtma kuting";
+                    document.getElementById('status').innerHTML = "🟢 Liniyadasiz";
                     myMap.setCenter([userLat, userLon], 16);
                 }
 
             }, function(err) {
                 document.getElementById('status').innerHTML = "🔴 GPS-ni yoqing!";
                 document.getElementById('status').style.color = "red";
-            }, { enableHighAccuracy: true });
+            }, { 
+                enableHighAccuracy: true,
+                maximumAge: 1000 
+            });
         }
     }
 
@@ -100,14 +117,14 @@
 
         multiRoute = new ymaps.multiRouter.MultiRoute({
             referencePoints: [
-                [parseFloat(sLat), parseFloat(sLon)], // Haydovchi
-                [parseFloat(eLat), parseFloat(eLon)]  // Mijoz
+                [parseFloat(sLat), parseFloat(sLon)],
+                [parseFloat(eLat), parseFloat(eLon)]
             ],
             params: { routingMode: 'auto' }
         }, {
             boundsAutoApply: true,
             routeActiveStrokeWidth: 6,
-            routeActiveStrokeColor: "#0000FF", // Ko'k marshrut chizig'i
+            routeActiveStrokeColor: "#0000FF",
             wayPointVisible: true
         });
 
