@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>AXI TAXI - Navigator</title>
+    <title>AXI TAXI - Taksimetr</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -9,151 +9,104 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <script src="https://api-maps.yandex.ru/2.1/?lang=uz_UZ&apikey=087cbcce-d8e3-46e1-be82-29127bd69ae5" type="text/javascript"></script>
     <style>
-        body { margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #1a1a1a; color: white; overflow: hidden; }
-        #map { width: 100%; height: 65vh; background: #222; }
-        .info-panel { padding: 15px; text-align: center; height: 35vh; box-sizing: border-box; background: #252525; border-top: 3px solid #FFD700; border-radius: 20px 20px 0 0; position: relative; z-index: 10; }
-        #status { font-weight: bold; color: #FFD700; margin-bottom: 10px; font-size: 18px; }
-        .btn-group { display: flex; justify-content: space-around; gap: 10px; margin-top: 15px; }
-        .btn { flex: 1; padding: 12px; border: none; border-radius: 10px; font-weight: bold; font-size: 14px; cursor: pointer; transition: 0.3s; }
-        .btn-call { background: #28a745; color: white; }
+        body { margin: 0; padding: 0; font-family: sans-serif; background: #1a1a1a; color: white; }
+        #map { width: 100%; height: 50vh; }
+        .taxi-panel { padding: 20px; text-align: center; background: #252525; border-top: 4px solid #FFD700; border-radius: 25px 25px 0 0; }
+        .price-display { font-size: 42px; font-weight: bold; color: #00FF00; margin: 10px 0; }
+        .distance-display { font-size: 18px; color: #aaa; }
+        .btn { width: 80%; padding: 15px; margin: 10px; border: none; border-radius: 12px; font-weight: bold; font-size: 18px; cursor: pointer; }
         .btn-arrived { background: #ffc107; color: black; }
-        .btn-refresh { background: #6c757d; color: white; }
-        #coords { font-size: 11px; color: #888; margin-top: 10px; }
+        .btn-start { background: #28a745; color: white; display: none; }
+        .btn-finish { background: #dc3545; color: white; display: none; }
     </style>
 </head>
 <body>
-
     <div id="map"></div>
-
-    <div class="info-panel">
-        <div id="status">🚕 Yo'nalish kutilmoqda...</div>
+    <div class="taxi-panel">
+        <div id="status">🚕 Mijozga borilmoqda...</div>
+        <div class="distance-display"><span id="km">0.0</span> km</div>
+        <div class="price-display"><span id="summa">0</span> so'm</div>
         
-        <div class="btn-group">
-            <button class="btn btn-call" onclick="callClient()">📞 Tel qilish</button>
-            <button class="btn btn-arrived" onclick="notifyArrived()">🏁 Keldim</button>
-        </div>
-        
-        <div class="btn-group">
-            <button class="btn btn-refresh" onclick="location.reload()">🔄 Yangilash</button>
-        </div>
-
-        <div id="coords">📍 GPS aniqlanmoqda...</div>
+        <button id="btnArrived" class="btn btn-arrived" onclick="arrived()">🏁 Keldim</button>
+        <button id="btnStart" class="btn btn-start" onclick="startTrip()">🚀 Safarni boshlash</button>
+        <button id="btnFinish" class="btn btn-finish" onclick="finishTrip()">🏁 Safarni yakunlash</button>
     </div>
 
     <script>
-    const tg = window.Telegram.WebApp;
-    tg.ready();
-    tg.expand();
+        const tg = window.Telegram.WebApp;
+        tg.ready(); tg.expand();
 
-    const firebaseConfig = {
-        databaseURL: "https://umut-taxi-default-rtdb.europe-west1.firebasedatabase.app/"
-    };
-    firebase.initializeApp(firebaseConfig);
-    const database = firebase.database();
+        let myMap, multiRoute, lastPos = null;
+        let totalDist = 0;
+        let isTripStarted = false;
 
-    let userId = "unknown";
-    let myMap, multiRoute, driverMarker;
-    let userLat, userLon;
-    let routeCreated = false;
+        // NARX SOZLAMALARI (O'zingizga moslang)
+        const START_PRICE = 5000; // Ochilish (minimal)
+        const PER_KM = 2500;    // 1 km uchun
 
-    const urlParams = new URLSearchParams(window.location.search);
-    const clientLat = urlParams.get('clat');
-    const clientLon = urlParams.get('clon');
-
-    function initApp() {
-        const user = tg.initDataUnsafe?.user;
-        userId = user ? user.id : "driver_test";
-
-        ymaps.ready(function () {
-            myMap = new ymaps.Map("map", {
-                center: [39.997, 65.924], 
-                zoom: 15,
-                controls: ['zoomControl', 'geolocationControl']
-            });
-            
-            driverMarker = new ymaps.Placemark([0,0], {}, {
-                preset: 'islands#blueAutoCircleIcon'
-            });
-            myMap.geoObjects.add(driverMarker);
-            
-            startGPS();
-        });
-    }
-
-    function startGPS() {
-        if (navigator.geolocation) {
-            navigator.geolocation.watchPosition(function(pos) {
-                userLat = pos.coords.latitude;
-                userLon = pos.coords.longitude;
-
-                database.ref('driver_location/' + userId).update({
-                    lat: userLat,
-                    lon: userLon,
-                    last_update: Date.now()
-                });
-
-                document.getElementById('coords').innerHTML = "📍 Pozitsiya: " + userLat.toFixed(5) + ", " + userLon.toFixed(5);
+        function init() {
+            ymaps.ready(() => {
+                myMap = new ymaps.Map("map", { center: [39.997, 65.924], zoom: 15 });
+                startTracking();
                 
-                if (driverMarker) driverMarker.geometry.setCoordinates([userLat, userLon]);
+                // Botdan kelgan mijoz koordinatalari
+                const urlParams = new URLSearchParams(window.location.search);
+                const clat = urlParams.get('clat'), clon = urlParams.get('clon');
+                if(clat && clon) drawRoute(clat, clon);
+            });
+        }
 
-                if (clientLat && clientLon && !routeCreated) {
-                    document.getElementById('status').innerHTML = "🚕 Mijoz sari yo'lga!";
-                    drawRoute(userLat, userLon, clientLat, clientLon);
-                    routeCreated = true; 
+        function drawRoute(lat, lon) {
+            navigator.geolocation.getCurrentPosition(p => {
+                multiRoute = new ymaps.multiRouter.MultiRoute({
+                    referencePoints: [[p.coords.latitude, p.coords.longitude], [lat, lon]],
+                    params: { routingMode: 'auto' }
+                }, { boundsAutoApply: true });
+                myMap.geoObjects.add(multiRoute);
+            });
+        }
+
+        function startTracking() {
+            navigator.geolocation.watchPosition(p => {
+                const cur = { lat: p.coords.latitude, lon: p.coords.longitude };
+                if (isTripStarted && lastPos) {
+                    const d = ymaps.coordSystem.geo.getDistance([lastPos.lat, lastPos.lon], [cur.lat, cur.lon]);
+                    totalDist += d;
+                    updateUI();
                 }
+                lastPos = cur;
             }, null, { enableHighAccuracy: true });
         }
-    }
 
-    function drawRoute(sLat, sLon, eLat, eLon) {
-        multiRoute = new ymaps.multiRouter.MultiRoute({
-            referencePoints: [[parseFloat(sLat), parseFloat(sLon)], [parseFloat(eLat), parseFloat(eLon)]],
-            params: { routingMode: 'auto' }
-        }, {
-            boundsAutoApply: true,
-            routeActiveStrokeWidth: 6,
-            routeActiveStrokeColor: "#0000FF"
-        });
-        myMap.geoObjects.add(multiRoute);
-    }
-
-    function callClient() {
-        // Bu yerda bot orqali mijoz bilan bog'lanish yoki tel raqamga yo'naltirish mumkin
-        tg.showAlert("Mijoz bilan bog'lanish xizmati faollashtirilmoqda...");
-    }
-
-        // Tugmalarni boshqarish: "Keldim" bosilgach, "Safar boshlandi" chiqadi
-    function notifyArrived() {
-        document.getElementById('status').innerHTML = "🏁 Siz mijoz oldidasiz";
-        document.getElementById('status').style.color = "#FFD700";
-        
-        // Mijozga borish marshrutini o'chiramiz
-        if (multiRoute) {
-            myMap.geoObjects.remove(multiRoute);
-            routeCreated = false; // Marshrutni qayta chizishga ruxsat beramiz (agar kerak bo'lsa)
+        function updateUI() {
+            const km = totalDist / 1000;
+            const price = START_PRICE + (km * PER_KM);
+            document.getElementById('km').innerText = km.toFixed(2);
+            document.getElementById('summa').innerText = Math.round(price / 500) * 500;
         }
-        
-        // Botga signal: "Haydovchi yetib keldi"
-        tg.sendData("arrived_" + userId);
-        
-        // Tugmalarni almashtiramiz
-        document.querySelector('.btn-arrived').style.display = 'none';
-        document.getElementById('start-trip-btn').style.display = 'block';
-    }
 
-    function startTrip() {
-        document.getElementById('status').innerHTML = "🚕 Safar boshlandi...";
-        document.getElementById('status').style.color = "#00FF00";
-        
-        // Bu yerda taksometrni (pul hisoblagichni) ishga tushirish mumkin
-        tg.sendData("trip_started_" + userId);
-        
-        // Agar mijozning boradigan manzili (lat2, lon2) bo'lsa, 
-        // yangi marshrutni shu yerda drawRoute qilib chizib yuboramiz.
-    }
+        function arrived() {
+            document.getElementById('status').innerText = "🏁 Mijoz kutilmoqda";
+            document.getElementById('btnArrived').style.display = 'none';
+            document.getElementById('btnStart').style.display = 'inline-block';
+            if (multiRoute) myMap.geoObjects.remove(multiRoute); // Marshrutni o'chirish
+        }
 
+        function startTrip() {
+            isTripStarted = true;
+            totalDist = 0; // Mijoz o'tirgandan keyin hisoblash boshlanadi
+            document.getElementById('status').innerText = "🚕 Safar davom etmoqda...";
+            document.getElementById('btnStart').style.display = 'none';
+            document.getElementById('btnFinish').style.display = 'inline-block';
+        }
 
-    window.onload = initApp;
+        function finishTrip() {
+            const finalSum = document.getElementById('summa').innerText;
+            tg.sendData("finish_" + finalSum); // Botga yakuniy summani yuboradi
+            tg.close();
+        }
+
+        window.onload = init;
     </script>
 </body>
 </html>
