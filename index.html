@@ -122,10 +122,36 @@
         tg.showAlert("Mijoz bilan bog'lanish xizmati faollashtirilmoqda...");
     }
 
+        // Tugmalarni boshqarish: "Keldim" bosilgach, "Safar boshlandi" chiqadi
     function notifyArrived() {
-        tg.sendData("arrived_" + userId); // Botga "Keldim" degan signal yuboradi
-        tg.close();
+        document.getElementById('status').innerHTML = "🏁 Siz mijoz oldidasiz";
+        document.getElementById('status').style.color = "#FFD700";
+        
+        // Mijozga borish marshrutini o'chiramiz
+        if (multiRoute) {
+            myMap.geoObjects.remove(multiRoute);
+            routeCreated = false; // Marshrutni qayta chizishga ruxsat beramiz (agar kerak bo'lsa)
+        }
+        
+        // Botga signal: "Haydovchi yetib keldi"
+        tg.sendData("arrived_" + userId);
+        
+        // Tugmalarni almashtiramiz
+        document.querySelector('.btn-arrived').style.display = 'none';
+        document.getElementById('start-trip-btn').style.display = 'block';
     }
+
+    function startTrip() {
+        document.getElementById('status').innerHTML = "🚕 Safar boshlandi...";
+        document.getElementById('status').style.color = "#00FF00";
+        
+        // Bu yerda taksometrni (pul hisoblagichni) ishga tushirish mumkin
+        tg.sendData("trip_started_" + userId);
+        
+        // Agar mijozning boradigan manzili (lat2, lon2) bo'lsa, 
+        // yangi marshrutni shu yerda drawRoute qilib chizib yuboramiz.
+    }
+
 
     window.onload = initApp;
     </script>
