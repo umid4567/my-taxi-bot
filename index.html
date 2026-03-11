@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>AXI TAXI - Taksimetr</title>
+    <title>AXI TAXI - Haydovchi</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -9,104 +9,68 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <script src="https://api-maps.yandex.ru/2.1/?lang=uz_UZ&apikey=087cbcce-d8e3-46e1-be82-29127bd69ae5" type="text/javascript"></script>
     <style>
-        body { margin: 0; padding: 0; font-family: sans-serif; background: #1a1a1a; color: white; }
+        body { font-family: sans-serif; margin: 0; background: #1a1a1a; color: white; text-align: center; }
         #map { width: 100%; height: 50vh; }
-        .taxi-panel { padding: 20px; text-align: center; background: #252525; border-top: 4px solid #FFD700; border-radius: 25px 25px 0 0; }
-        .price-display { font-size: 42px; font-weight: bold; color: #00FF00; margin: 10px 0; }
-        .distance-display { font-size: 18px; color: #aaa; }
-        .btn { width: 80%; padding: 15px; margin: 10px; border: none; border-radius: 12px; font-weight: bold; font-size: 18px; cursor: pointer; }
-        .btn-arrived { background: #ffc107; color: black; }
-        .btn-start { background: #28a745; color: white; display: none; }
-        .btn-finish { background: #dc3545; color: white; display: none; }
+        .panel { padding: 20px; background: #222; border-top: 3px solid #fbc02d; }
+        .summa { font-size: 45px; font-weight: bold; color: #4caf50; margin: 10px 0; }
+        .btn { width: 90%; padding: 15px; margin: 10px; border: none; border-radius: 10px; font-size: 18px; font-weight: bold; cursor: pointer; }
+        .start { background: #4caf50; color: white; }
+        .stop { background: #f44336; color: white; }
     </style>
 </head>
 <body>
     <div id="map"></div>
-    <div class="taxi-panel">
-        <div id="status">🚕 Mijozga borilmoqda...</div>
-        <div class="distance-display"><span id="km">0.0</span> km</div>
-        <div class="price-display"><span id="summa">0</span> so'm</div>
-        
-        <button id="btnArrived" class="btn btn-arrived" onclick="arrived()">🏁 Keldim</button>
-        <button id="btnStart" class="btn btn-start" onclick="startTrip()">🚀 Safarni boshlash</button>
-        <button id="btnFinish" class="btn btn-finish" onclick="finishTrip()">🏁 Safarni yakunlash</button>
+    <div class="panel">
+        <div id="status">Kuting...</div>
+        <div class="summa"><span id="price">0</span> so'm</div>
+        <div id="info">0.0 km</div>
+        <button id="btnAction" class="btn start" onclick="toggleTrip()">SAFARNI BOSHLASH</button>
     </div>
 
     <script>
         const tg = window.Telegram.WebApp;
-        tg.ready(); tg.expand();
+        const config = { databaseURL: "https://umut-taxi-default-rtdb.europe-west1.firebasedatabase.app/" };
+        firebase.initializeApp(config);
+        const db = firebase.database();
 
-        let myMap, multiRoute, lastPos = null;
-        let totalDist = 0;
-        let isTripStarted = false;
+        let isRunning = false, totalDist = 0, lastPos = null, watchId = null;
+        const orderId = new URLSearchParams(window.location.search).get('order_id') || "test_trip";
 
-        // NARX SOZLAMALARI (O'zingizga moslang)
-        const START_PRICE = 5000; // Ochilish (minimal)
-        const PER_KM = 2500;    // 1 km uchun
-
-        function init() {
-            ymaps.ready(() => {
-                myMap = new ymaps.Map("map", { center: [39.997, 65.924], zoom: 15 });
+        function toggleTrip() {
+            const btn = document.getElementById('btnAction');
+            if (!isRunning) {
+                isRunning = true;
+                btn.innerText = "SAFARNI YAKUNLASH";
+                btn.className = "btn stop";
                 startTracking();
-                
-                // Botdan kelgan mijoz koordinatalari
-                const urlParams = new URLSearchParams(window.location.search);
-                const clat = urlParams.get('clat'), clon = urlParams.get('clon');
-                if(clat && clon) drawRoute(clat, clon);
-            });
-        }
-
-        function drawRoute(lat, lon) {
-            navigator.geolocation.getCurrentPosition(p => {
-                multiRoute = new ymaps.multiRouter.MultiRoute({
-                    referencePoints: [[p.coords.latitude, p.coords.longitude], [lat, lon]],
-                    params: { routingMode: 'auto' }
-                }, { boundsAutoApply: true });
-                myMap.geoObjects.add(multiRoute);
-            });
+            } else {
+                navigator.geolocation.clearWatch(watchId);
+                tg.close();
+            }
         }
 
         function startTracking() {
-            navigator.geolocation.watchPosition(p => {
+            watchId = navigator.geolocation.watchPosition(p => {
                 const cur = { lat: p.coords.latitude, lon: p.coords.longitude };
-                if (isTripStarted && lastPos) {
+                if (lastPos) {
                     const d = ymaps.coordSystem.geo.getDistance([lastPos.lat, lastPos.lon], [cur.lat, cur.lon]);
                     totalDist += d;
-                    updateUI();
+                    const km = totalDist / 1000;
+                    const price = 5000 + (km * 2000); // 5000 kirish, 2000 har km uchun
+                    const finalPrice = Math.round(price / 500) * 500;
+                    
+                    document.getElementById('price').innerText = finalPrice;
+                    document.getElementById('info').innerText = km.toFixed(1) + " km";
+
+                    db.ref('trips/' + orderId).set({
+                        lat: cur.lat, lon: cur.lon,
+                        price: finalPrice, km: km.toFixed(1)
+                    });
                 }
                 lastPos = cur;
             }, null, { enableHighAccuracy: true });
         }
-
-        function updateUI() {
-            const km = totalDist / 1000;
-            const price = START_PRICE + (km * PER_KM);
-            document.getElementById('km').innerText = km.toFixed(2);
-            document.getElementById('summa').innerText = Math.round(price / 500) * 500;
-        }
-
-        function arrived() {
-            document.getElementById('status').innerText = "🏁 Mijoz kutilmoqda";
-            document.getElementById('btnArrived').style.display = 'none';
-            document.getElementById('btnStart').style.display = 'inline-block';
-            if (multiRoute) myMap.geoObjects.remove(multiRoute); // Marshrutni o'chirish
-        }
-
-        function startTrip() {
-            isTripStarted = true;
-            totalDist = 0; // Mijoz o'tirgandan keyin hisoblash boshlanadi
-            document.getElementById('status').innerText = "🚕 Safar davom etmoqda...";
-            document.getElementById('btnStart').style.display = 'none';
-            document.getElementById('btnFinish').style.display = 'inline-block';
-        }
-
-        function finishTrip() {
-            const finalSum = document.getElementById('summa').innerText;
-            tg.sendData("finish_" + finalSum); // Botga yakuniy summani yuboradi
-            tg.close();
-        }
-
-        window.onload = init;
     </script>
 </body>
 </html>
+
