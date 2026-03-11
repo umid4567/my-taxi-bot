@@ -3,18 +3,22 @@
 <head>
     <title>AXI TAXI - Navigator</title>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <script src="https://api-maps.yandex.ru/2.1/?lang=uz_UZ&apikey=087cbcce-d8e3-46e1-be82-29127bd69ae5" type="text/javascript"></script>
     <style>
-        body { margin: 0; padding: 0; font-family: sans-serif; background: #1a1a1a; color: white; overflow: hidden; }
-        #map { width: 100%; height: 75vh; background: #222; }
-        .info-panel { padding: 10px; text-align: center; height: 25vh; box-sizing: border-box; background: #1a1a1a; border-top: 2px solid #FFD700; }
-        #status { font-weight: bold; color: orange; margin: 5px 0; font-size: 16px; }
-        #coords { font-size: 12px; color: #FFD700; margin-bottom: 5px; }
-        .btn-refresh { padding: 8px 20px; background: #FFD700; border: none; border-radius: 5px; font-weight: bold; color: black; cursor: pointer; }
+        body { margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #1a1a1a; color: white; overflow: hidden; }
+        #map { width: 100%; height: 65vh; background: #222; }
+        .info-panel { padding: 15px; text-align: center; height: 35vh; box-sizing: border-box; background: #252525; border-top: 3px solid #FFD700; border-radius: 20px 20px 0 0; position: relative; z-index: 10; }
+        #status { font-weight: bold; color: #FFD700; margin-bottom: 10px; font-size: 18px; }
+        .btn-group { display: flex; justify-content: space-around; gap: 10px; margin-top: 15px; }
+        .btn { flex: 1; padding: 12px; border: none; border-radius: 10px; font-weight: bold; font-size: 14px; cursor: pointer; transition: 0.3s; }
+        .btn-call { background: #28a745; color: white; }
+        .btn-arrived { background: #ffc107; color: black; }
+        .btn-refresh { background: #6c757d; color: white; }
+        #coords { font-size: 11px; color: #888; margin-top: 10px; }
     </style>
 </head>
 <body>
@@ -22,10 +26,18 @@
     <div id="map"></div>
 
     <div class="info-panel">
-        <h2 style="color: #FFD700; margin: 0;">AXI TAXI</h2>
-        <p id="status">🟢 GPS kutilmoqda...</p>
-        <div id="coords">📍 Manzil aniqlanmoqda...</div>
-        <button class="btn-refresh" onclick="location.reload()">🔄 Xaritani yangilash</button>
+        <div id="status">🚕 Yo'nalish kutilmoqda...</div>
+        
+        <div class="btn-group">
+            <button class="btn btn-call" onclick="callClient()">📞 Tel qilish</button>
+            <button class="btn btn-arrived" onclick="notifyArrived()">🏁 Keldim</button>
+        </div>
+        
+        <div class="btn-group">
+            <button class="btn btn-refresh" onclick="location.reload()">🔄 Yangilash</button>
+        </div>
+
+        <div id="coords">📍 GPS aniqlanmoqda...</div>
     </div>
 
     <script>
@@ -59,7 +71,6 @@
                 controls: ['zoomControl', 'geolocationControl']
             });
             
-            // Haydovchi metkasini yaratamiz
             driverMarker = new ymaps.Placemark([0,0], {}, {
                 preset: 'islands#blueAutoCircleIcon'
             });
@@ -81,54 +92,39 @@
                     last_update: Date.now()
                 });
 
-                document.getElementById('coords').innerHTML = "📍 Siz: " + userLat.toFixed(5) + ", " + userLon.toFixed(5);
+                document.getElementById('coords').innerHTML = "📍 Pozitsiya: " + userLat.toFixed(5) + ", " + userLon.toFixed(5);
                 
-                // Haydovchi nuqtasini harakatlantiramiz
-                if (driverMarker) {
-                    driverMarker.geometry.setCoordinates([userLat, userLon]);
-                }
+                if (driverMarker) driverMarker.geometry.setCoordinates([userLat, userLon]);
 
-                if (clientLat && clientLon) {
-                    if (!routeCreated) {
-                        document.getElementById('status').innerHTML = "🚕 Yo'nalish chizildi";
-                        document.getElementById('status').style.color = "#00FF00";
-                        drawRoute(userLat, userLon, clientLat, clientLon);
-                        routeCreated = true; 
-                    }
-                } else {
-                    document.getElementById('status').innerHTML = "🟢 Liniyadasiz";
-                    myMap.setCenter([userLat, userLon], 16);
+                if (clientLat && clientLon && !routeCreated) {
+                    document.getElementById('status').innerHTML = "🚕 Mijoz sari yo'lga!";
+                    drawRoute(userLat, userLon, clientLat, clientLon);
+                    routeCreated = true; 
                 }
-
-            }, function(err) {
-                document.getElementById('status').innerHTML = "🔴 GPS-ni yoqing!";
-                document.getElementById('status').style.color = "red";
-            }, { 
-                enableHighAccuracy: true,
-                maximumAge: 1000 
-            });
+            }, null, { enableHighAccuracy: true });
         }
     }
 
     function drawRoute(sLat, sLon, eLat, eLon) {
-        if (multiRoute) {
-            myMap.geoObjects.remove(multiRoute);
-        }
-
         multiRoute = new ymaps.multiRouter.MultiRoute({
-            referencePoints: [
-                [parseFloat(sLat), parseFloat(sLon)],
-                [parseFloat(eLat), parseFloat(eLon)]
-            ],
+            referencePoints: [[parseFloat(sLat), parseFloat(sLon)], [parseFloat(eLat), parseFloat(eLon)]],
             params: { routingMode: 'auto' }
         }, {
             boundsAutoApply: true,
             routeActiveStrokeWidth: 6,
-            routeActiveStrokeColor: "#0000FF",
-            wayPointVisible: true
+            routeActiveStrokeColor: "#0000FF"
         });
-
         myMap.geoObjects.add(multiRoute);
+    }
+
+    function callClient() {
+        // Bu yerda bot orqali mijoz bilan bog'lanish yoki tel raqamga yo'naltirish mumkin
+        tg.showAlert("Mijoz bilan bog'lanish xizmati faollashtirilmoqda...");
+    }
+
+    function notifyArrived() {
+        tg.sendData("arrived_" + userId); // Botga "Keldim" degan signal yuboradi
+        tg.close();
     }
 
     window.onload = initApp;
