@@ -3,26 +3,35 @@
 <head>
     <title>AXI TAXI - Yo'lovchi</title>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <script src="https://api-maps.yandex.ru/2.1/?lang=uz_UZ&apikey=087cbcce-d8e3-46e1-be82-29127bd69ae5" type="text/javascript"></script>
+    
     <style>
-        body { font-family: sans-serif; background: #f4f4f4; text-align: center; padding: 20px; }
-        .card { background: white; border-radius: 20px; padding: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-        .price { font-size: 36px; color: #28a745; font-weight: bold; margin: 15px 0; }
-        .driver-info { border-top: 1px solid #eee; padding-top: 15px; margin-top: 15px; }
-        .status-badge { background: #ffc107; padding: 5px 15px; border-radius: 50px; font-size: 14px; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; margin: 0; padding: 0; }
+        #map { width: 100%; height: 60vh; background: #ddd; }
+        .passenger-panel { position: fixed; bottom: 0; width: 100%; background: white; border-top-left-radius: 25px; border-top-right-radius: 25px; box-shadow: 0 -5px 15px rgba(0,0,0,0.1); padding: 20px; box-sizing: border-box; text-align: center; }
+        .status-text { font-size: 14px; color: #666; margin-bottom: 5px; }
+        .price-val { font-size: 38px; font-weight: bold; color: #28a745; margin: 10px 0; }
+        .driver-card { display: flex; align-items: center; justify-content: space-between; background: #f8f9fa; padding: 15px; border-radius: 15px; margin-top: 10px; }
+        .call-btn { background: #007bff; color: white; padding: 10px 20px; border-radius: 10px; text-decoration: none; font-weight: bold; }
     </style>
 </head>
 <body>
-    <div class="card">
-        <div id="status" class="status-badge">Haydovchi qidirilmoqda...</div>
-        <div class="price"><span id="live_summa">0</span> so'm</div>
-        <div id="distance">Masofa: 0.0 km</div>
-
-        <div class="driver-info" id="driver_box" style="display:none;">
-            <p>🚕 <b>Haydovchi yo'lda</b></p>
-            <p id="driver_name">Ism: ...</p>
-            <a id="driver_phone" href="tel:+998" style="text-decoration:none; color:#007bff; font-weight:bold;">📞 Qo'ng'iroq qilish</a>
+    <div id="map"></div>
+    <div class="passenger-panel">
+        <div class="status-text" id="status">🚕 Haydovchi sizga qarab kelmoqda...</div>
+        <div class="price-val"><span id="live_sum">0</span> so'm</div>
+        <div id="dist_info" style="font-size: 14px; color: #888;">0.0 km bosib o'tildi</div>
+        
+        <div class="driver-card" id="driver_info">
+            <div style="text-align: left;">
+                <div style="font-weight: bold; font-size: 16px;">Umid Home</div>
+                <div style="font-size: 12px; color: #666;">Oq Jentra | 80 A 777 AA</div>
+            </div>
+            <a href="tel:+998901234567" class="call-btn">📞 Tel qilish</a>
         </div>
     </div>
 
@@ -30,9 +39,52 @@
         const tg = window.Telegram.WebApp;
         tg.ready();
 
-        // Bu yerda Firebase orqali haydovchining jonli lokatsiyasini 
-        // va hisoblanayotgan summani yo'lovchiga ko'rsatib turamiz.
-        // Hozircha haydovchi Web App yuborgan ma'lumotni bu yerga ulaymiz.
+        let myMap, driverMarker;
+
+        // Firebase sozlamalari (Buni keyinchalik shaxsiy bazangizga almashtiramiz)
+        const firebaseConfig = { databaseURL: "https://SIZING_FIREBASE_SSILKASI.firebaseio.com/" };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        // Yo'lovchi ID sini URL dan olamiz
+        const urlParams = new URLSearchParams(window.location.search);
+        const orderId = urlParams.get('order_id');
+
+        function init() {
+            ymaps.ready(() => {
+                myMap = new ymaps.Map("map", { center: [39.997, 65.924], zoom: 15 });
+                
+                // Haydovchi harakatini bazadan "eshitish"
+                if(orderId) {
+                    db.ref('active_trips/' + orderId).on('value', (snapshot) => {
+                        const data = snapshot.val();
+                        if(data) {
+                            updatePassengerUI(data);
+                        }
+                    });
+                }
+            });
+        }
+
+        function updatePassengerUI(data) {
+            // Narx va masofani yangilash
+            document.getElementById('live_sum').innerText = data.current_price || 0;
+            document.getElementById('dist_info').innerText = (data.distance || 0).toFixed(1) + " km bosib o'tildi";
+            
+            // Xaritada haydovchini ko'rsatish
+            if(data.lat && data.lon) {
+                const pos = [data.lat, data.lon];
+                if(!driverMarker) {
+                    driverMarker = new ymaps.Placemark(pos, {}, { preset: 'islands#autoIcon', iconColor: '#ff0000' });
+                    myMap.geoObjects.add(driverMarker);
+                } else {
+                    driverMarker.geometry.setCoordinates(pos);
+                }
+                myMap.setCenter(pos);
+            }
+        }
+
+        window.onload = init;
     </script>
 </body>
 </html>
