@@ -54,51 +54,60 @@
         let isTripStarted = false;
 
         function init() {
-            ymaps.ready(() => {
-                myMap = new ymaps.Map("map", { 
-                    center: [39.9469, 66.2625], 
-                    zoom: 15,
-                    controls: ['zoomControl', 'geolocationControl']
-                });
-                
-                startTracking();
-                if(clat && clon) drawRoute(clat, clon);
-            });
-        }
+    ymaps.ready(() => {
+        // Markazni mijoz koordinatalariga (clat, clon) o'rnatamiz
+        const centerCoords = (clat && clon) ? [parseFloat(clat), parseFloat(clon)] : [39.9469, 66.2625];
+        
+        myMap = new ymaps.Map("map", { 
+            center: centerCoords, 
+            zoom: 16, // Biroq yaqinroq qilamiz
+            controls: ['zoomControl', 'geolocationControl']
+        });
+        
+        startTracking();
+        if(clat && clon) drawRoute(clat, clon);
+    });
+}
+
 
         function startTracking() {
-            navigator.geolocation.watchPosition(p => {
-                const cur = { lat: p.coords.latitude, lon: p.coords.longitude };
-                const coords = [cur.lat, cur.lon];
+    navigator.geolocation.watchPosition(p => {
+        const cur = { lat: p.coords.latitude, lon: p.coords.longitude };
+        const coords = [cur.lat, cur.lon];
 
-                if (!driverMarker) {
-                    driverMarker = new ymaps.Placemark(coords, {}, { 
-                        iconLayout: 'default#image', 
-                        iconImageHref: 'https://cdn-icons-png.flaticon.com/512/741/741407.png', 
-                        iconImageSize: [40, 40] 
-                    });
-                    myMap.geoObjects.add(driverMarker);
-                } else {
-                    driverMarker.geometry.setCoordinates(coords);
-                }
-
-                if (isTripStarted && lastPos) {
-                    const d = ymaps.coordSystem.geo.getDistance([lastPos.lat, lastPos.lon], coords);
-                    if (d > 2) { 
-                        totalDist += d;
-                        updateUI();
-                    }
-                }
-                lastPos = cur;
-
-                if(orderId) {
-                    db.ref('orders/' + orderId).update({
-                        driver_lat: cur.lat,
-                        driver_lon: cur.lon
-                    });
-                }
-            }, err => console.error(err), { enableHighAccuracy: true });
+        // Haydovchi markerini yangilash
+        if (!driverMarker) {
+            driverMarker = new ymaps.Placemark(coords, {}, { 
+                iconLayout: 'default#image', 
+                iconImageHref: 'https://cdn-icons-png.flaticon.com/512/741/741407.png', 
+                iconImageSize: [40, 40] 
+            });
+            myMap.geoObjects.add(driverMarker);
+            
+            // AGAR YO'NALISH CHIZILMAGAN BO'LSA, SHU YERDA CHIZAMIZ
+            if(clat && clon && !multiRoute) {
+                drawRoute(cur.lat, cur.lon, clat, clon);
+            }
+        } else {
+            driverMarker.geometry.setCoordinates(coords);
         }
+        
+        // ... qolgan kodlar (totalDist, Firebase update) ...
+    });
+}
+
+// drawRoute funksiyasini 4 ta parametrli qilamiz
+function drawRoute(startLat, startLon, endLat, endLon) {
+    if (multiRoute) myMap.geoObjects.remove(multiRoute);
+
+    multiRoute = new ymaps.multiRouter.MultiRoute({
+        referencePoints: [[startLat, startLon], [parseFloat(endLat), parseFloat(endLon)]],
+        params: { routingMode: 'auto' }
+    }, { boundsAutoApply: true, routeActiveStrokeColor: "#FFD700" });
+    
+    myMap.geoObjects.add(multiRoute);
+}
+
 
         function drawRoute(lat, lon) {
             multiRoute = new ymaps.multiRouter.MultiRoute({
