@@ -102,33 +102,40 @@
             currentOrder = null;
         }
 
-        function acceptOrder() {
+                function acceptOrder() {
             if (!currentOrder || !currentOrder.id) return;
 
             const oId = currentOrder.id;
             const oLat = currentOrder.lat;
             const oLon = currentOrder.lon;
 
-            // Buyurtmani band qilish (Race Condition oldini olish uchun)
+            // 1. Buyurtmani band qilish
             db.ref('orders/' + oId).transaction((order) => {
                 if (order && order.status === "waiting") {
                     order.status = "accepted";
                     order.driver_id = driverId;
-                    order.client_notified = false; // main.py uchun signal
+                    order.client_notified = false; // Bot uchun bayroqcha
                     return order;
                 }
-                return; // Agar kimdir ilib ketgan bo'lsa, hech narsa qilmaydi
+                return; 
             }, (error, committed, snapshot) => {
                 if (committed) {
-                    // Muvaffaqiyatli qabul qilinsa, taksimetrga (index.html) yo'naltirish
-                    const mapUrl = `index.html?order_id=${oId}&clat=${oLat}&clon=${oLon}`;
-                    window.location.href = mapUrl;
+                    // 2. MUHIM: Tranzaksiyadan so'ng notified maydonini qayta tekshirib, False qilib qo'yamiz
+                    // Bu main.py xabarni ko'rishi uchun kafolat beradi
+                    db.ref('orders/' + oId).update({
+                        client_notified: false
+                    }).then(() => {
+                        console.log("Mijozga bildirishnoma signali yuborildi.");
+                        const mapUrl = `index.html?order_id=${oId}&clat=${oLat}&clon=${oLon}`;
+                        window.location.href = mapUrl;
+                    });
                 } else {
                     alert("Kechirasiz, bu buyurtmani boshqa haydovchi qabul qilib bo'ldi! 🛑");
                     hideOrder();
                 }
             });
         }
+
     </script>
 </body>
 </html>
