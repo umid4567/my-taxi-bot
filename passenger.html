@@ -64,34 +64,46 @@
             }
 
             // Firebase dan "JONLI" kuzatish
-            db.ref('trips/' + orderId).on('value', (snapshot) => {
-                const data = snapshot.val();
-                if (data) {
-                    // 1. Narxni yangilash
-                    document.getElementById('p_price').innerText = data.price || 0;
-                    
-                    // 2. Statusga qarab dizaynni o'zgartirish
-                    const badge = document.getElementById('status_badge');
-                    const info = document.getElementById('p_info');
+db.ref('orders/' + orderId).on('value', (snapshot) => {
+    const data = snapshot.val();
+    if (data) {
+        document.getElementById('p_price').innerText = data.price || 0;
+        const badge = document.getElementById('status_badge');
+        const info = document.getElementById('p_info');
 
-                    if (data.status === "coming") {
-                        badge.innerText = "🚕 Haydovchi kelyapti";
-                        badge.className = "status-badge status-coming";
-                        info.innerText = "Haydovchi siz tomonga yo'lga chiqdi";
-                    } else if (data.status === "arrived") {
-                        badge.innerText = "🏁 Haydovchi keldi";
-                        badge.className = "status-badge status-arrived";
-                        info.innerText = "Haydovchi manzilingizga yetib keldi, chiqishingiz mumkin";
-                    } else if (data.status === "riding") {
-                        badge.innerText = "🚀 Safar davom etmoqda";
-                        badge.className = "status-badge status-riding";
-                        info.innerText = (data.km || "0.0") + " km yo'l bosildi";
-                    } else if (data.status === "finished") {
-                        badge.innerText = "✅ Safar yakunlandi";
-                        badge.style.background = "#eee";
-                        badge.style.color = "#333";
-                        info.innerText = "Rahmat! Safar yakunlandi.";
-                    }
+        // Statuslarni Python va Haydovchi paneli bilan bir xil qildik
+        if (data.status === "accepted" || data.status === "coming") {
+            badge.innerText = "🚕 Haydovchi kelyapti";
+            badge.className = "status-badge status-coming";
+            info.innerText = "Haydovchi siz tomonga yo'lga chiqdi";
+        } else if (data.status === "arrived") {
+            badge.innerText = "🏁 Haydovchi keldi";
+            badge.className = "status-badge status-arrived";
+            info.innerText = "Haydovchi yetib keldi, chiqishingiz mumkin";
+        } else if (data.status === "riding") {
+            badge.innerText = "🚀 Safar davom etmoqda";
+            badge.className = "status-badge status-riding";
+            info.innerText = (data.km || "0.0") + " km yo'l bosildi";
+        }
+
+        // Haydovchi lokatsiyasi (driver_lat/lon o'qiladi)
+        if (data.driver_lat && data.driver_lon) {
+            const pos = [data.driver_lat, data.driver_lon];
+            if (!taxiMarker) {
+                taxiMarker = new ymaps.Placemark(pos, {}, {
+                    iconLayout: 'default#image',
+                    iconImageHref: 'https://cdn-icons-png.flaticon.com/512/741/741407.png',
+                    iconImageSize: [40, 40]
+                });
+                myMap.geoObjects.add(taxiMarker);
+            } else {
+                taxiMarker.geometry.setCoordinates(pos);
+            }
+            myMap.panTo(pos, { flying: true });
+        }
+    }
+});
+
 
                     // 3. Haydovchi koordinatalari va xaritada harakat
                     if (data.lat && data.lon) {
