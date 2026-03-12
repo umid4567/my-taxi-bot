@@ -106,31 +106,42 @@
         }
 
         function acceptOrder() {
-    if (!currentOrder || !currentOrder.id) return;
+    if (!currentOrder || !currentOrder.id) {
+        alert("Xatolik: Buyurtma ma'lumotlari yuklanmadi. Iltimos, biroz kuting.");
+        return;
+    }
 
     const oId = currentOrder.id;
+    const oLat = currentOrder.lat;
+    const oLon = currentOrder.lon;
 
-    // 1. AVVAL TEKSHIRAMIZ: Zakaz hali ham bo'sh turibdimi?
+    // 1. Avval bazada tekshiramiz: zakaz hali ham bo'sh turibdimi?
     db.ref('orders/' + oId).once('value').then(snapshot => {
         const orderData = snapshot.val();
         
         if (orderData && orderData.status === "waiting") {
-            // 2. AGAR BO'SH BO'LSA - ENDI QABUL QILAMIZ
+            // 2. Statusni "accepted" ga o'zgartiramiz
             db.ref('orders/' + oId).update({
                 status: "accepted",
                 driver_id: driverId
             }).then(() => {
-                window.location.href = "index.html?order_id=" + oId + 
-                                       "&clat=" + currentOrder.lat + 
-                                       "&clon=" + currentOrder.lon;
+                console.log("Muvaffaqiyatli qabul qilindi!");
+                
+                // 3. XARITAGA O'TISH (URL manzilini tekshiring)
+                // Diqqat: index.html fayli GitHub'da aynan shu nomda ekanligini tekshiring
+                const mapUrl = "index.html?order_id=" + oId + "&clat=" + oLat + "&clon=" + oLon;
+                window.location.href = mapUrl;
+                
+            }).catch(err => {
+                alert("Bazaga yozishda xato: " + err.message);
             });
         } else {
-            // 3. AGAR BOSHQA HAYDOVCHI ILIB KETGAN BO'LSA
-            alert("Kechirasiz, bu buyurtmani boshqa haydovchi qabul qilib ulgurdi! 🛑");
+            alert("Kechirasiz, bu buyurtmani boshqa haydovchi ilib ketdi! 🛑");
             hideOrder();
         }
     });
 }
+
 
     </script>
 </body>
