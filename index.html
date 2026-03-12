@@ -30,8 +30,9 @@
         <button id="btnArrived" class="btn btn-arrived" onclick="arrived()">🏁 Keldim</button>
         <button id="btnStart" class="btn btn-start" onclick="startTrip()">🚀 Safarni boshlash</button>
         <button id="btnFinish" class="btn btn-finish" onclick="finishTrip()">🏁 Safarni yakunlash</button>
-        <button onclick="callClient()" style="background: #0088cc; color: white; width: 90%; padding: 15px; margin: 10px; border-radius: 12px; border: none; font-weight: bold; font-size: 16px;">
-    🔹 TELEGRAMDAN ALOQA</button>
+        <button onclick="callClient()" style="background: #0088cc; color: white; width: 90%; padding: 15px; margin: 10px; border-radius: 12px; border: none; font-weight: bold; font-size: 16px; cursor: pointer;">
+    🔹 TELEGRAMDAN ALOQA
+</button>
 
     </div>
 
@@ -151,14 +152,22 @@
         }
         
         function callClient() {
+    // orderId - bu mijozning Telegram ID-si
     if (orderId) {
-        // Telegram Web App orqali tashqi havolani ochish
-        tg.openTelegramLink("https://t.me/user?id=" + orderId);
+        // Telegram Web App havolani ochishining eng ishonchli yo'li
+        const profileLink = "https://t.me/user?id=" + orderId;
+        
+        try {
+            // Telegramning o'z funksiyasi orqali ochamiz
+            tg.openTelegramLink(profileLink);
+        } catch (e) {
+            // Agar tg obyekti topilmasa, oddiy usulda urinib ko'radi
+            window.open(profileLink, '_blank');
+        }
     } else {
-        alert("Mijoz ID-si xato!");
+        alert("Mijoz ID-si topilmadi!");
     }
 }
-
 
         window.onload = init;
     </script>
