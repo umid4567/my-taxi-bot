@@ -9,40 +9,39 @@
     <script src="https://api-maps.yandex.ru/2.1/?lang=uz_UZ&apikey=087cbcce-d8e3-46e1-be82-29127bd69ae5" type="text/javascript"></script>
     
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background: #f4f4f4; overflow: hidden; }
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; background: #f4f4f4; overflow: hidden; }
         #map { width: 100%; height: 65vh; background: #e5e3db; }
         .card { 
             position: fixed; bottom: 0; width: 100%; height: 35vh;
-            background: white; padding: 25px; 
+            background: white; padding: 20px; 
             border-radius: 25px 25px 0 0; 
             box-shadow: 0 -10px 20px rgba(0,0,0,0.1); 
-            box-sizing: border-box;
-            text-align: center;
+            box-sizing: border-box; text-align: center;
         }
-        .price-label { font-size: 16px; color: #666; margin-bottom: 5px; }
-        .price { font-size: 42px; color: #28a745; font-weight: bold; margin-bottom: 10px; }
-        .info { font-size: 18px; color: #333; background: #f8f9fa; padding: 10px; border-radius: 10px; }
-        .status-dot { height: 10px; width: 10px; background-color: #28a745; border-radius: 50%; display: inline-block; margin-right: 5px; }
+        .price-label { font-size: 14px; color: #666; text-transform: uppercase; letter-spacing: 1px; }
+        .price { font-size: 48px; color: #28a745; font-weight: bold; margin: 5px 0; }
+        .info-box { background: #f8f9fa; border-radius: 15px; padding: 15px; margin-top: 10px; border: 1px solid #eee; }
+        #p_info { font-size: 18px; color: #333; font-weight: 500; }
+        .status-badge { display: inline-block; padding: 5px 12px; border-radius: 20px; font-size: 12px; margin-bottom: 10px; font-weight: bold; }
+        .status-active { background: #e8f5e9; color: #2e7d32; }
     </style>
 </head>
 <body>
     <div id="map"></div>
     <div class="card">
-        <div class="price-label">Safar haqi:</div>
+        <div id="status_badge" class="status-badge status-active">🚕 HAYDOVCHI YO'LDA</div>
+        <div class="price-label">To'lov miqdori:</div>
         <div class="price"><span id="p_price">0</span> so'm</div>
-        <div class="info">
-            <span class="status-dot"></span>
-            <span id="p_info">Haydovchi qidirilmoqda...</span>
+        <div class="info-box">
+            <div id="p_info">Haydovchi kutilmoqda...</div>
         </div>
     </div>
 
     <script>
-        // Firebase sozlamalari
         const config = { databaseURL: "https://umut-taxi-default-rtdb.europe-west1.firebasedatabase.app/" };
-        firebase.initializeApp(config);
+        if (!firebase.apps.length) { firebase.initializeApp(config); }
         const db = firebase.database();
 
-        // Order ID ni URL dan olish
         const urlParams = new URLSearchParams(window.location.search);
         const orderId = urlParams.get('order_id') || "test_trip";
 
@@ -51,39 +50,41 @@
         ymaps.ready(init);
 
         function init() {
-            // Xaritani yaratish
             myMap = new ymaps.Map("map", {
-                center: [39.9976, 66.2657], // Kattakurgan
+                center: [39.9976, 66.2657],
                 zoom: 16,
-                controls: ['zoomControl']
+                controls: ['zoomControl', 'geolocationControl']
             });
 
-            // Firebase dan ma'lumotni "JONLI" (on value) eshitish
+            // Firebase dan "JONLI" kuzatish
             db.ref('trips/' + orderId).on('value', (snapshot) => {
                 const data = snapshot.val();
-                if (data && data.lat && data.lon) {
-                    const pos = [data.lat, data.lon];
-                    
-                    // Narx va masofani yangilash
+                if (data) {
+                    // 1. Narx va masofani yangilash
                     document.getElementById('p_price').innerText = data.price || 0;
-                    document.getElementById('p_info').innerText = (data.km || 0) + " km yo'l yurildi";
-
-                    // Haydovchi belgisini yangilash
-                    if (!taxiMarker) {
-                        taxiMarker = new ymaps.Placemark(pos, {
-                            balloonContent: 'Sizning haydovchingiz'
-                        }, {
-                            preset: 'islands#taxiIcon', // Taksicha belgisi
-                            iconColor: '#fbc02d'
-                        });
-                        myMap.geoObjects.add(taxiMarker);
-                    } else {
-                        // Markerni silliq harakatlantirish
-                        taxiMarker.geometry.setCoordinates(pos);
-                    }
                     
-                    // Xaritani haydovchi markazida ushlab turish
-                    myMap.setCenter(pos, 16, { checkZoomRange: true });
+                    if (data.status === "finished") {
+                        document.getElementById('p_info').innerText = "🏁 Safar yakunlandi. Rahmat!";
+                        document.getElementById('status_badge').innerText = "✅ YAKUNLANDI";
+                        document.getElementById('status_badge').style.background = "#eee";
+                    } else {
+                        document.getElementById('p_info').innerText = (data.km || "0.0") + " km yo'l bosildi";
+                    }
+
+                    // 2. Haydovchi koordinatalari
+                    if (data.lat && data.lon) {
+                        const pos = [data.lat, data.lon];
+                        if (!taxiMarker) {
+                            taxiMarker = new ymaps.Placemark(pos, { balloonContent: 'Sizning taksingiz' }, {
+                                preset: 'islands#taxiIcon',
+                                iconColor: '#fbc02d'
+                            });
+                            myMap.geoObjects.add(taxiMarker);
+                        } else {
+                            taxiMarker.geometry.setCoordinates(pos);
+                        }
+                        myMap.setCenter(pos, 16, { checkZoomRange: true, duration: 500 });
+                    }
                 }
             });
         }
