@@ -101,18 +101,17 @@
         }
 
         function updateUI() {
-    const km = totalDist / 1000; // Metrni KM ga o'tkazish
-    const startPrice = 5000;     // O'tirish narxi
-    const kmPrice = 2500;        // Har bir km uchun
+    const km = totalDist / 1000; // Metrni km ga o'tkazish
     
-    const price = startPrice + (km * kmPrice);
+    // TARIF: 5000 boshlang'ich + har km uchun 2500
+    const price = 5000 + (km * 2500); 
     const finalPrice = Math.round(price / 500) * 500; // 500 so'mga yaxlitlash
 
     // Ekranda ko'rsatish
     document.getElementById('km').innerText = km.toFixed(2);
     document.getElementById('summa').innerText = finalPrice;
     
-    // FIREBASE GA YOZISH (Eng muhim joyi)
+    // MIJOZGA YUBORISH (Firebase'dagi orders papkasiga)
     if(orderId) {
         db.ref('orders/' + orderId).update({ 
             km: km.toFixed(2), 
@@ -120,6 +119,7 @@
         });
     }
 }
+
 
 
         function arrived() {
