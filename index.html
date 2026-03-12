@@ -101,12 +101,25 @@ function drawRoute(startLat, startLon, endLat, endLon) {
     if (multiRoute) myMap.geoObjects.remove(multiRoute);
 
     multiRoute = new ymaps.multiRouter.MultiRoute({
-        referencePoints: [[startLat, startLon], [parseFloat(endLat), parseFloat(endLon)]],
-        params: { routingMode: 'auto' }
-    }, { boundsAutoApply: true, routeActiveStrokeColor: "#FFD700" });
+        // 1-nuqta: Haydovchining turgan joyi (moshina)
+        // 2-nuqta: Mijozning turgan joyi (A/B nuqta)
+        referencePoints: [
+            [startLat, startLon], 
+            [parseFloat(endLat), parseFloat(endLon)]
+        ],
+        params: { 
+            routingMode: 'auto' 
+        }
+    }, { 
+        boundsAutoApply: true, 
+        routeActiveStrokeColor: "#FFD700",
+        // Ortiqcha markerlarni o'chiramiz, chunki bizda moshina belgisi bor
+        wayPointVisible: false 
+    });
     
     myMap.geoObjects.add(multiRoute);
 }
+
 
 
         function drawRoute(lat, lon) {
