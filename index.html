@@ -18,7 +18,7 @@
         .btn-arrived { background: #ffc107; color: black; }
         .btn-start { background: #28a745; color: white; display: none; }
         .btn-finish { background: #dc3545; color: white; display: none; }
-        .btn-call { background: #0088cc; color: white; }
+        .btn-call { background: #0088cc; color: white; margin-top: 10px; }
     </style>
 </head>
 <body>
@@ -36,20 +36,17 @@
     </div>
 
     <script>
-        // 1. Telegram WebApp ni ishga tushirish
         const tg = window.Telegram.WebApp;
         tg.ready();
         tg.expand();
 
-        // 2. Firebase Sozlamalari
         const config = { databaseURL: "https://umut-taxi-default-rtdb.europe-west1.firebasedatabase.app/" };
         if (!firebase.apps.length) { firebase.initializeApp(config); }
         const db = firebase.database();
 
-        // 3. URL dan ID larni olish (Xatolikni oldini olish uchun)
         const params = new URLSearchParams(window.location.search);
-        // Bot yuborayotgan 'order_id' ni aniq olish
-        const orderId = params.get('order_id'); 
+        // Universal ID olish: order_id yoki id
+        const orderId = params.get('order_id') || params.get('id'); 
         const clat = params.get('clat');
         const clon = params.get('clon');
 
@@ -60,7 +57,7 @@
         function init() {
             ymaps.ready(() => {
                 myMap = new ymaps.Map("map", { 
-                    center: [39.9469, 66.2625], // Kattaqo'rg'on
+                    center: [39.9469, 66.2625], 
                     zoom: 15,
                     controls: ['zoomControl', 'geolocationControl']
                 });
@@ -87,7 +84,8 @@
                     driverMarker.geometry.setCoordinates(coords);
                 }
 
-                if(orderId) {
+                // Mijozga haydovchi koordinatasini yuborish
+                if(orderId && orderId !== "null") {
                     db.ref('trips/' + orderId).update({
                         lat: cur.lat,
                         lon: cur.lon,
@@ -95,12 +93,16 @@
                     });
                 }
 
+                // Masofa hisoblash (Faqat safar boshlanganda)
                 if (isTripStarted && lastPos) {
                     const d = ymaps.coordSystem.geo.getDistance([lastPos.lat, lastPos.lon], coords);
-                    if (d > 5) { totalDist += d; updateUI(); }
+                    if (d > 3) { // 3 metrdan ortiq harakat bo'lsa hisoblaydi
+                        totalDist += d; 
+                        updateUI(); 
+                    }
                 }
                 lastPos = cur;
-            }, (err) => console.error(err), { enableHighAccuracy: true });
+            }, (err) => console.error(err), { enableHighAccuracy: true, distanceFilter: 1 });
         }
 
         function drawRoute(lat, lon) {
@@ -113,10 +115,11 @@
 
         function updateUI() {
             const km = totalDist / 1000;
-            const price = 5000 + (km * 2500); 
+            const price = 5000 + (km * 2500); // Start 5000 + km 2500
             const finalPrice = Math.round(price / 500) * 500;
             document.getElementById('km').innerText = km.toFixed(2);
             document.getElementById('summa').innerText = finalPrice;
+            
             if(orderId) db.ref('trips/' + orderId).update({ km: km.toFixed(2), price: finalPrice });
         }
 
@@ -125,7 +128,7 @@
             document.getElementById('btnArrived').style.display = 'none';
             document.getElementById('btnStart').style.display = 'inline-block';
             if (multiRoute) myMap.geoObjects.remove(multiRoute);
-            if(orderId) db.ref('trips/' + orderId).update({ status: "arrived" });
+            if(orderId) db.ref('orders/' + orderId).update({ status: "arrived" });
         }
 
         function startTrip() {
@@ -139,21 +142,20 @@
 
         function finishTrip() {
             const finalSum = document.getElementById('summa').innerText;
-            if(orderId) db.ref('trips/' + orderId).update({ status: "finished" });
+            if(orderId) {
+                db.ref('trips/' + orderId).update({ status: "finished" });
+                db.ref('orders/' + orderId).remove(); // Buyurtmani tozalash
+            }
             tg.sendData("finish_" + finalSum);
             setTimeout(() => tg.close(), 500);
         }
         
-        // --- ASOSIY TUZALGAN FUNKSIYA ---
         function callClient() {
-            // Agar orderId bo'lsa, Telegram profilini ochadi
             if (orderId && orderId !== "null") {
                 const profileLink = "https://t.me/user?id=" + orderId;
                 tg.openTelegramLink(profileLink);
             } else {
-                // Agar ID baribir topilmasa, botdan kelayotgan linkni tekshirish kerak
-                alert("Mijoz ID-si topilmadi. Linkni tekshiring!");
-                console.log("Hozirgi URL:", window.location.search);
+                alert("Mijoz ID-si topilmadi!");
             }
         }
 
