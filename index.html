@@ -30,6 +30,9 @@
         <button id="btnArrived" class="btn btn-arrived" onclick="arrived()">🏁 Keldim</button>
         <button id="btnStart" class="btn btn-start" onclick="startTrip()">🚀 Safarni boshlash</button>
         <button id="btnFinish" class="btn btn-finish" onclick="finishTrip()">🏁 Safarni yakunlash</button>
+        <button onclick="callClient()" style="background: #0088cc; color: white; width: 90%; padding: 15px; margin: 10px; border-radius: 12px; border: none; font-weight: bold; font-size: 16px;">
+    🔹 TELEGRAMDAN ALOQA</button>
+
     </div>
 
     <script>
@@ -146,6 +149,13 @@
             tg.sendData("finish_" + finalSum);
             setTimeout(() => tg.close(), 500);
         }
+        
+        function callClient() {
+    // orderId - bu mijozning Telegram ID-si. 
+    // Bu link bosilganda Telegram mijozning profilini ochadi va tepada "Qo'ng'iroq qilish" chiqadi
+    window.location.href = "tg://user?id=" + orderId;
+}
+
 
         window.onload = init;
     </script>
