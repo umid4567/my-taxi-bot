@@ -22,18 +22,20 @@
         .price { font-size: 48px; color: #28a745; font-weight: bold; margin: 5px 0; }
         .info-box { background: #f8f9fa; border-radius: 15px; padding: 15px; margin-top: 10px; border: 1px solid #eee; }
         #p_info { font-size: 18px; color: #333; font-weight: 500; }
-        .status-badge { display: inline-block; padding: 5px 12px; border-radius: 20px; font-size: 12px; margin-bottom: 10px; font-weight: bold; }
-        .status-active { background: #e8f5e9; color: #2e7d32; }
+        .status-badge { display: inline-block; padding: 5px 12px; border-radius: 20px; font-size: 12px; margin-bottom: 10px; font-weight: bold; text-transform: uppercase; }
+        .status-coming { background: #fff3e0; color: #ef6c00; } /* Kelmoqda */
+        .status-arrived { background: #e3f2fd; color: #1565c0; } /* Keldi */
+        .status-riding { background: #e8f5e9; color: #2e7d32; } /* Yo'lda */
     </style>
 </head>
 <body>
     <div id="map"></div>
     <div class="card">
-        <div id="status_badge" class="status-badge status-active">🚕 HAYDOVCHI YO'LDA</div>
+        <div id="status_badge" class="status-badge status-coming">🚕 HAYDOVCHI QABUL QILDI</div>
         <div class="price-label">To'lov miqdori:</div>
         <div class="price"><span id="p_price">0</span> so'm</div>
         <div class="info-box">
-            <div id="p_info">Haydovchi kutilmoqda...</div>
+            <div id="p_info">Haydovchi lokatsiyasi olinmoqda...</div>
         </div>
     </div>
 
@@ -43,7 +45,7 @@
         const db = firebase.database();
 
         const urlParams = new URLSearchParams(window.location.search);
-        const orderId = urlParams.get('order_id') || "test_trip";
+        const orderId = urlParams.get('order_id');
 
         let myMap, taxiMarker;
 
@@ -51,40 +53,68 @@
 
         function init() {
             myMap = new ymaps.Map("map", {
-                center: [39.9976, 66.2657],
+                center: [39.9469, 66.2625], // Kattaqo'rg'on markazi default
                 zoom: 16,
                 controls: ['zoomControl', 'geolocationControl']
             });
+
+            if (!orderId) {
+                document.getElementById('p_info').innerText = "Xatolik: Buyurtma ID topilmadi";
+                return;
+            }
 
             // Firebase dan "JONLI" kuzatish
             db.ref('trips/' + orderId).on('value', (snapshot) => {
                 const data = snapshot.val();
                 if (data) {
-                    // 1. Narx va masofani yangilash
+                    // 1. Narxni yangilash
                     document.getElementById('p_price').innerText = data.price || 0;
                     
-                    if (data.status === "finished") {
-                        document.getElementById('p_info').innerText = "🏁 Safar yakunlandi. Rahmat!";
-                        document.getElementById('status_badge').innerText = "✅ YAKUNLANDI";
-                        document.getElementById('status_badge').style.background = "#eee";
-                    } else {
-                        document.getElementById('p_info').innerText = (data.km || "0.0") + " km yo'l bosildi";
+                    // 2. Statusga qarab dizaynni o'zgartirish
+                    const badge = document.getElementById('status_badge');
+                    const info = document.getElementById('p_info');
+
+                    if (data.status === "coming") {
+                        badge.innerText = "🚕 Haydovchi kelyapti";
+                        badge.className = "status-badge status-coming";
+                        info.innerText = "Haydovchi siz tomonga yo'lga chiqdi";
+                    } else if (data.status === "arrived") {
+                        badge.innerText = "🏁 Haydovchi keldi";
+                        badge.className = "status-badge status-arrived";
+                        info.innerText = "Haydovchi manzilingizga yetib keldi, chiqishingiz mumkin";
+                    } else if (data.status === "riding") {
+                        badge.innerText = "🚀 Safar davom etmoqda";
+                        badge.className = "status-badge status-riding";
+                        info.innerText = (data.km || "0.0") + " km yo'l bosildi";
+                    } else if (data.status === "finished") {
+                        badge.innerText = "✅ Safar yakunlandi";
+                        badge.style.background = "#eee";
+                        badge.style.color = "#333";
+                        info.innerText = "Rahmat! Safar yakunlandi.";
                     }
 
-                    // 2. Haydovchi koordinatalari
+                    // 3. Haydovchi koordinatalari va xaritada harakat
                     if (data.lat && data.lon) {
                         const pos = [data.lat, data.lon];
                         if (!taxiMarker) {
                             taxiMarker = new ymaps.Placemark(pos, { balloonContent: 'Sizning taksingiz' }, {
-                                preset: 'islands#taxiIcon',
-                                iconColor: '#fbc02d'
+                                iconLayout: 'default#image',
+                                iconImageHref: 'https://cdn-icons-png.flaticon.com/512/741/741407.png', // Taksi ikonchasi
+                                iconImageSize: [40, 40],
+                                iconImageOffset: [-20, -20]
                             });
                             myMap.geoObjects.add(taxiMarker);
+                            myMap.setCenter(pos);
                         } else {
+                            // Ikonkani silliq harakatlantirish
                             taxiMarker.geometry.setCoordinates(pos);
                         }
-                        myMap.setCenter(pos, 16, { checkZoomRange: true, duration: 500 });
+                        
+                        // Haydovchi harakatlanganda xarita uni markazda ushlab turadi
+                        myMap.panTo(pos, { flying: true, duration: 1000 });
                     }
+                } else {
+                    info.innerText = "Buyurtma ma'lumotlari kutilmoqda...";
                 }
             });
         }
