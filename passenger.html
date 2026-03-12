@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="uz">
 <head>
-    <title>AXI TAXI - Yo'lovchi</title>
+    <title>AXI TAXI - Kuzatuv</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
@@ -13,16 +13,11 @@
         #map { width: 100%; height: 65vh; background: #e5e3db; }
         .card { 
             position: fixed; bottom: 0; width: 100%; height: 35vh;
-            background: white; padding: 20px; 
-            border-radius: 25px 25px 0 0; 
-            box-shadow: 0 -10px 20px rgba(0,0,0,0.1); 
-            box-sizing: border-box; text-align: center;
+            background: white; padding: 20px; border-radius: 25px 25px 0 0; 
+            box-shadow: 0 -10px 20px rgba(0,0,0,0.1); box-sizing: border-box; text-align: center;
         }
-        .price-label { font-size: 14px; color: #666; text-transform: uppercase; letter-spacing: 1px; }
-        .price { font-size: 40px; color: #28a745; font-weight: bold; margin: 5px 0; }
-        .info-box { background: #f8f9fa; border-radius: 15px; padding: 15px; margin-top: 10px; border: 1px solid #eee; }
-        #p_info { font-size: 18px; color: #333; font-weight: 500; }
-        .status-badge { display: inline-block; padding: 5px 12px; border-radius: 20px; font-size: 12px; margin-bottom: 10px; font-weight: bold; text-transform: uppercase; }
+        .price { font-size: 42px; color: #28a745; font-weight: bold; margin: 5px 0; }
+        .status-badge { display: inline-block; padding: 6px 15px; border-radius: 20px; font-size: 12px; font-weight: bold; text-transform: uppercase; margin-bottom: 10px; }
         .status-coming { background: #fff3e0; color: #ef6c00; }
         .status-arrived { background: #e3f2fd; color: #1565c0; }
         .status-riding { background: #e8f5e9; color: #2e7d32; }
@@ -31,114 +26,73 @@
 <body>
     <div id="map"></div>
     <div class="card">
-        <div id="status_badge" class="status-badge status-coming">🚕 HAYDOVCHI QIDIRILMOQDA</div>
-        <div class="price-label">To'lov miqdori:</div>
+        <div id="status_badge" class="status-badge status-coming">KUTILMOQDA</div>
+        <div style="color: #666; font-size: 14px;">To'lov:</div>
         <div class="price"><span id="p_price">0</span> so'm</div>
-        <div class="info-box">
-            <div id="p_info">Haydovchi qabul qilishi kutilmoqda...</div>
-        </div>
+        <div id="p_info" style="margin-top: 10px; color: #333; font-weight: 500;">Ma'lumotlar olinmoqda...</div>
     </div>
 
     <script>
-        // 1. Firebase Sozlamalari
         const config = { databaseURL: "https://umut-taxi-default-rtdb.europe-west1.firebasedatabase.app/" };
         if (!firebase.apps.length) { firebase.initializeApp(config); }
         const db = firebase.database();
 
-        // 2. URL dan Order ID ni olish
         const urlParams = new URLSearchParams(window.location.search);
         const orderId = urlParams.get('order_id');
 
         let myMap, taxiMarker;
 
-        // 3. Xaritani yuklash
-        ymaps.ready(init);
-
-        function init() {
-            myMap = new ymaps.Map("map", {
-                center: [39.9469, 66.2625], 
-                zoom: 16,
-                controls: ['zoomControl', 'geolocationControl']
-            });
+        ymaps.ready(() => {
+            myMap = new ymaps.Map("map", { center: [39.9469, 66.2625], zoom: 15, controls: ['zoomControl'] });
 
             if (!orderId) {
-                document.getElementById('p_info').innerText = "Xatolik: Buyurtma ID topilmadi";
+                document.getElementById('p_info').innerText = "ID topilmadi!";
                 return;
             }
 
-            // Firebase dan "JONLI" kuzatish
-db.ref('orders/' + orderId).on('value', (snapshot) => {
-    const data = snapshot.val();
-    if (data) {
-        // NARXNI YANGILASH (toLocaleString - 10 000 ko'rinishida chiqaradi)
-        if (data.price !== undefined) {
-            document.getElementById('p_price').innerText = data.price.toLocaleString();
-        } else {
-            document.getElementById('p_price').innerText = "0";
-        }
+            // Real-time kuzatish
+            db.ref('orders/' + orderId).on('value', (snapshot) => {
+                const data = snapshot.val();
+                if (!data) return;
 
-        const badge = document.getElementById('status_badge');
-        const info = document.getElementById('p_info');
+                // 1. Narxni chiqarish
+                document.getElementById('p_price').innerText = data.price ? data.price.toLocaleString() : "0";
 
-        if (data.status === "accepted" || data.status === "coming") {
-            badge.innerText = "🚕 Haydovchi kelyapti";
-            badge.className = "status-badge status-coming";
-            info.innerText = "Haydovchi siz tomonga yo'lga chiqdi";
-        } else if (data.status === "arrived") {
-            badge.innerText = "🏁 Haydovchi keldi";
-            badge.className = "status-badge status-arrived";
-            info.innerText = "Haydovchi yetib keldi, chiqishingiz mumkin";
-        } else if (data.status === "riding") {
-            badge.innerText = "🚀 Safar davom etmoqda";
-            badge.className = "status-badge status-riding";
-            info.innerText = (data.km || "0.0") + " km yo'l bosildi";
-        }
-        
-        // Lokatsiya va marker kodi o'zgarishsiz qoladi...
-        if (data.driver_lat && data.driver_lon) {
-            const pos = [data.driver_lat, data.driver_lon];
-            if (!taxiMarker) {
-                taxiMarker = new ymaps.Placemark(pos, {}, {
-                    iconLayout: 'default#image',
-                    iconImageHref: 'https://cdn-icons-png.flaticon.com/512/741/741407.png',
-                    iconImageSize: [40, 40]
-                });
-                myMap.geoObjects.add(taxiMarker);
-            } else {
-                taxiMarker.geometry.setCoordinates(pos);
-            }
-            myMap.panTo(pos, { flying: true });
-        }
-    }
-});
+                // 2. Statusni yangilash
+                const badge = document.getElementById('status_badge');
+                const info = document.getElementById('p_info');
 
+                if (data.status === "accepted" || data.status === "coming") {
+                    badge.innerText = "🚕 Haydovchi kelyapti";
+                    badge.className = "status-badge status-coming";
+                    info.innerText = "Haydovchi siz tomonga yo'lga chiqdi";
+                } else if (data.status === "arrived") {
+                    badge.innerText = "🏁 Haydovchi keldi";
+                    badge.className = "status-badge status-arrived";
+                    info.innerText = "Haydovchi yetib keldi";
+                } else if (data.status === "riding") {
+                    badge.innerText = "🚀 Safar davom etmoqda";
+                    badge.className = "status-badge status-riding";
+                    info.innerText = (data.km || "0.0") + " km yo'l bosildi";
+                }
 
-                    // 5. HAYDOVCHI HARAKATI (driver_lat va driver_lon bo'yicha)
-                    if (data.driver_lat && data.driver_lon) {
-                        const pos = [data.driver_lat, data.driver_lon];
-                        
-                        if (!taxiMarker) {
-                            taxiMarker = new ymaps.Placemark(pos, { balloonContent: 'Sizning taksingiz' }, {
-                                iconLayout: 'default#image',
-                                iconImageHref: 'https://cdn-icons-png.flaticon.com/512/741/741407.png', 
-                                iconImageSize: [40, 40],
-                                iconImageOffset: [-20, -20]
-                            });
-                            myMap.geoObjects.add(taxiMarker);
-                            myMap.setCenter(pos);
-                        } else {
-                            // Mashina markerini silliq siljitish
-                            taxiMarker.geometry.setCoordinates(pos);
-                        }
-                        
-                        // Xaritani haydovchi bilan birga markazda ushlab turish
-                        myMap.panTo(pos, { flying: true, duration: 1000 });
+                // 3. Xaritada haydovchini ko'rsatish
+                if (data.driver_lat && data.driver_lon) {
+                    const pos = [data.driver_lat, data.driver_lon];
+                    if (!taxiMarker) {
+                        taxiMarker = new ymaps.Placemark(pos, {}, {
+                            iconLayout: 'default#image',
+                            iconImageHref: 'https://cdn-icons-png.flaticon.com/512/741/741407.png',
+                            iconImageSize: [40, 40]
+                        });
+                        myMap.geoObjects.add(taxiMarker);
+                    } else {
+                        taxiMarker.geometry.setCoordinates(pos);
                     }
-                } else {
-                    document.getElementById('p_info').innerText = "Buyurtma topilmadi yoki yakunlangan.";
+                    myMap.panTo(pos, { flying: true, duration: 1000 });
                 }
             });
-        }
+        });
     </script>
 </body>
 </html>
