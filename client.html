@@ -12,14 +12,18 @@
         body, html, #map { margin: 0; padding: 0; width: 100%; height: 100%; background: #1a1a1a; }
         .info-box {
             position: fixed; top: 10px; left: 10px; right: 10px;
-            background: rgba(0,0,0,0.8); color: white; padding: 15px;
-            border-radius: 10px; border: 1px solid #FFD700;
-            text-align: center; z-index: 1000; font-family: sans-serif;
+            background: rgba(0,0,0,0.85); color: white; padding: 15px;
+            border-radius: 12px; border: 2px solid #FFD700;
+            text-align: center; z-index: 1000; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
         }
+        #status-text { font-size: 18px; font-weight: bold; }
     </style>
 </head>
 <body>
-    <div class="info-box" id="status-text">🚕 Haydovchi kutilmoqda...</div>
+    <div class="info-box">
+        <div id="status-text">🚕 Haydovchi aniqlanmoqda...</div>
+    </div>
     <div id="map"></div>
     
     <script>
@@ -28,7 +32,7 @@
         if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
         const db = firebase.database();
 
-        // 2. URL'dan ma'lumotlarni olish
+        // 2. URL'dan order_id ni olish
         const urlParams = new URLSearchParams(window.location.search);
         const orderId = urlParams.get('order_id');
 
@@ -39,54 +43,62 @@
 
         function init() {
             myMap = new ymaps.Map("map", {
-                center: [39.9469, 66.2625], // Kattaqo'rg'on markazi
-                zoom: 15,
+                center: [39.9469, 66.2625], // Kattaqo'rg'on
+                zoom: 16,
                 controls: ['zoomControl', 'geolocationControl']
             });
 
             if (orderId) {
                 trackThisOrder();
             } else {
-                document.getElementById('status-text').innerText = "❌ Buyurtma topilmadi";
+                document.getElementById('status-text').innerText = "❌ Buyurtma ID topilmadi";
             }
         }
 
         function trackThisOrder() {
-            // Aynan shu buyurtma bo'yicha haydovchi harakatini kuzatish
+            // trips/ papkasini real vaqtda kuzatish
             db.ref('trips/' + orderId).on('value', (snapshot) => {
                 const data = snapshot.val();
-                if (!data) return;
+                
+                if (!data || !data.lat || !data.lon) {
+                    document.getElementById('status-text').innerText = "⏳ Haydovchi lokatsiyasi kutilmoqda...";
+                    return;
+                }
 
-                const pos = [data.lat, data.lon];
+                const pos = [parseFloat(data.lat), parseFloat(data.lon)];
                 const status = data.status;
 
-                // Statusga qarab matnni o'zgartirish
+                // Statusga qarab mijozga ma'lumot berish
                 const statusMap = {
                     "coming": "🚕 Haydovchi sizga qarab kelmoqda",
-                    "arrived": "🏁 Haydovchi yetib keldi! Tashqariga chiqing.",
+                    "arrived": "🏁 Haydovchi yetib keldi! Chiqishingiz mumkin",
                     "riding": "🚕 Safar davom etmoqda...",
                     "finished": "✅ Safar yakunlandi. Rahmat!"
                 };
+                
                 document.getElementById('status-text').innerText = statusMap[status] || "🚕 Haydovchi yo'lda";
 
-                // Mashina belgisini xaritaga qo'shish yoki yangilash
+                // Mashina belgisini yangilash
                 if (!driverMarker) {
                     driverMarker = new ymaps.Placemark(pos, {
-                        hintContent: 'Haydovchi'
+                        hintContent: 'Taksi'
                     }, {
                         iconLayout: 'default#image',
-                        iconImageHref: 'https://cdn-icons-png.flaticon.com/512/741/741407.png', // Sariq mashina iconkasi
-                        iconImageSize: [40, 40],
-                        iconImageOffset: [-20, -20]
+                        iconImageHref: 'https://cdn-icons-png.flaticon.com/512/741/741407.png', // Mashina rasmi
+                        iconImageSize: [44, 44],
+                        iconImageOffset: [-22, -22]
                     });
                     myMap.geoObjects.add(driverMarker);
                 } else {
-                    // Silliq harakatlanish uchun marker koordinatasini yangilaymiz
+                    // Marker joyini silliq o'zgartirish
                     driverMarker.geometry.setCoordinates(pos);
                 }
 
-                // Xaritani haydovchi markazida ushlab turish (ixtiyoriy)
-                myMap.setCenter(pos, myMap.getZoom(), { duration: 1000 });
+                // Haydovchi harakatiga qarab xaritani ham surib turish
+                myMap.panTo(pos, { flying: true, duration: 1000 });
+            }, (error) => {
+                console.error("Firebase xatosi:", error);
+                document.getElementById('status-text').innerText = "⚠️ Aloqa xatosi";
             });
         }
     </script>
