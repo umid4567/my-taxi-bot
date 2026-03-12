@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Axi Taxi - Haydovchi Paneli</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <script src="https://api-maps.yandex.ru/2.1/?lang=uz_UZ&apikey=087cbcce-d8e3-46e1-be82-29127bd69ae5" type="text/javascript"></script>
+    <style>
+        body { font-family: sans-serif; background: #121212; color: white; margin: 0; padding: 10px; }
+        .order-card { background: #1e1e1e; border: 2px solid #fbc02d; border-radius: 15px; padding: 15px; margin-top: 20px; display: none; }
+        .dist { font-size: 24px; color: #fbc02d; font-weight: bold; }
+        .btn { width: 100%; padding: 15px; border: none; border-radius: 10px; margin-top: 10px; font-weight: bold; font-size: 16px; }
+        .btn-accept { background: #4caf50; color: white; }
+        .btn-reject { background: #f44336; color: white; }
+        #waiting { text-align: center; margin-top: 50px; color: #777; }
+    </style>
+</head>
+<body>
+    <div id="waiting">🔄 Buyurtmalar kutilmoqda...</div>
+
+    <div id="orderBox" class="order-card">
+        <div style="font-size: 18px;">Yangi buyurtma!</div>
+        <div id="clientName" style="font-size: 20px; font-weight: bold;">Mijoz</div>
+        <div class="dist">Masofa: <span id="distance">0.0</span> km</div>
+        <button class="btn btn-accept" onclick="acceptOrder()">QABUL QILISH</button>
+        <button class="btn btn-reject" onclick="rejectOrder()">RAD ETISH</button>
+    </div>
+
+    <script>
+        const config = { databaseURL: "https://umut-taxi-default-rtdb.europe-west1.firebasedatabase.app/" };
+        firebase.initializeApp(config);
+        const db = firebase.database();
+        
+        let currentOrder = null;
+        let myPos = null;
+
+        // 1. Haydovchining joyini aniqlash
+        navigator.geolocation.watchPosition(p => {
+            myPos = [p.coords.latitude, p.coords.longitude];
+        });
+
+        // 2. Bazadagi buyurtmalarni kuzatish
+        db.ref('orders').on('value', (snapshot) => {
+            const orders = snapshot.val();
+            if (orders) {
+                // Eng birinchi turgan zakazni olamiz
+                const firstId = Object.keys(orders)[0];
+                currentOrder = { id: firstId, ...orders[firstId] };
+                
+                showOrder(currentOrder);
+            } else {
+                hideOrder();
+            }
+        });
+
+        function showOrder(order) {
+            document.getElementById('waiting').style.display = 'none';
+            document.getElementById('orderBox').style.display = 'block';
+            document.getElementById('clientName').innerText = order.name;
+            
+            if (myPos) {
+                // Masofani o'lchash
+                const d = ymaps.coordSystem.geo.getDistance(myPos, [order.lat, order.lon]);
+                document.getElementById('distance').innerText = (d / 1000).toFixed(1);
+            }
+        }
+
+        function hideOrder() {
+            document.getElementById('waiting').style.display = 'block';
+            document.getElementById('orderBox').style.display = 'none';
+        }
+
+        function acceptOrder() {
+            // Zakazni qabul qilganda asinxron ravishda haydovchi xaritasiga o'tamiz
+            window.location.href = `index.html?order_id=${currentOrder.id}&clat=${currentOrder.lat}&clon=${currentOrder.lon}`;
+        }
+
+        function rejectOrder() {
+            // Rad etilsa, shunchaki ekrandan yashiramiz (yoki bazadan o'chirmasdan boshqaga qoldiramiz)
+            hideOrder();
+        }
+    </script>
+</body>
+</html>
+
