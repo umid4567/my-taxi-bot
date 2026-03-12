@@ -10,8 +10,8 @@
     <script src="https://api-maps.yandex.ru/2.1/?lang=uz_UZ&apikey=087cbcce-d8e3-46e1-be82-29127bd69ae5" type="text/javascript"></script>
     <style>
         body { margin: 0; padding: 0; font-family: sans-serif; background: #1a1a1a; color: white; overflow: hidden; }
-        #map { width: 100%; height: 45vh; }
-        .taxi-panel { height: 55vh; padding: 15px; text-align: center; background: #252525; border-top: 4px solid #FFD700; border-radius: 25px 25px 0 0; box-sizing: border-box; overflow-y: auto; }
+        #map { width: 100%; height: 45vh; background-color: #252525; }
+        .taxi-panel { height: 55vh; padding: 15px; text-align: center; background: #252525; border-top: 4px solid #FFD700; border-radius: 25px 25px 0 0; box-sizing: border-box; }
         .price-display { font-size: 40px; font-weight: bold; color: #00FF00; margin: 5px 0; }
         .distance-display { font-size: 18px; color: #aaa; }
         .btn { width: 95%; padding: 15px; margin: 5px 0; border: none; border-radius: 12px; font-weight: bold; font-size: 16px; cursor: pointer; text-transform: uppercase; }
@@ -30,7 +30,7 @@
         
         <button id="btnArrived" class="btn btn-arrived" onclick="arrived()">🏁 Keldim</button>
         <button id="btnStart" class="btn btn-start" onclick="startTrip()">🚀 Safarni boshlash</button>
-        <button id="btnFinish" class="btn btn-finish" onclick="finishTrip()">🏁 Safarni yakunlash</button>
+        <button id="btnFinish" class="btn btn-finish" onclick="finishTrip()">🏁 Safarni yakunlandi</button>
         
         <button class="btn btn-call" onclick="callClient()">📞 MIJOZGA QO'NG'IROQ</button>
     </div>
@@ -49,123 +49,95 @@
         const clat = params.get('clat');
         const clon = params.get('clon');
 
-        let myMap, multiRoute, driverMarker = null, lastPos = null;
+        let myMap, multiRoute = null, driverMarker = null, lastPos = null;
         let totalDist = 0;
         let isTripStarted = false;
 
         function init() {
-    ymaps.ready(() => {
-        // Xarita markazini mijoz turgan joyga (clat, clon) qaratamiz
-        const clientLat = parseFloat(clat);
-        const clientLon = parseFloat(clon);
+            ymaps.ready(() => {
+                // clat va clon borligini tekshiramiz, yo'q bo'lsa markaziy nuqtani olamiz
+                const startLat = clat ? parseFloat(clat) : 39.9469;
+                const startLon = clon ? parseFloat(clon) : 66.2625;
 
-        myMap = new ymaps.Map("map", { 
-            center: [clientLat, clientLon], 
-            zoom: 14,
-            controls: ['zoomControl', 'geolocationControl']
-        });
-        
-        startTracking();
-    });
-}
-
-function startTracking() {
-    navigator.geolocation.watchPosition(p => {
-        const curLat = p.coords.latitude;
-        const curLon = p.coords.longitude;
-        const coords = [curLat, curLon];
-
-        // 1. Haydovchi markerini yangilash
-        if (!driverMarker) {
-            driverMarker = new ymaps.Placemark(coords, {}, { 
-                iconLayout: 'default#image', 
-                iconImageHref: 'https://cdn-icons-png.flaticon.com/512/741/741407.png', 
-                iconImageSize: [40, 40],
-                iconImageOffset: [-20, -20]
-            });
-            myMap.geoObjects.add(driverMarker);
-        } else {
-            driverMarker.geometry.setCoordinates(coords);
-        }
-
-        // 2. Yo'nalishni FAQAT haydovchi joyi aniqlanganda chizamiz
-        // Haydovchidan (cur) -> Mijozgacha (clat, clon)
-        if (clat && clon) {
-            drawRoute(curLat, curLon, clat, clon);
-        }
-
-        // 3. Firebase'ni yangilash
-        if(orderId) {
-            db.ref('orders/' + orderId).update({
-                driver_lat: curLat,
-                driver_lon: curLon
+                myMap = new ymaps.Map("map", { 
+                    center: [startLat, startLon], 
+                    zoom: 14,
+                    controls: ['zoomControl', 'geolocationControl']
+                });
+                
+                startTracking();
             });
         }
-    }, err => console.error(err), { enableHighAccuracy: true });
-}
 
-        function drawRoute(startLat, startLon, endLat, endLon) {
-    // 1. Agar avvalgi yo'nalish mavjud bo'lsa, uni xaritadan butunlay o'chiramiz
-    if (window.multiRoute) {
-        myMap.geoObjects.remove(window.multiRoute);
-    }
+        function startTracking() {
+            navigator.geolocation.watchPosition(p => {
+                const curLat = p.coords.latitude;
+                const curLon = p.coords.longitude;
+                const coords = [curLat, curLon];
 
-    // 2. Yangi yo'nalish ob'ektini yaratamiz
-    window.multiRoute = new ymaps.multiRouter.MultiRoute({
-        referencePoints: [
-            [startLat, startLon], 
-            [parseFloat(endLat), parseFloat(endLon)]
-        ],
-        params: { routingMode: 'auto' }
-    }, { 
-        boundsAutoApply: false, 
-        routeActiveStrokeColor: "#FFD700",
-        routeActiveStrokeWidth: 5,
-        // --- ASOSIY QISM: Markerlarni (A va B) butunlay yashirish ---
-        wayPointVisible: false, 
-        viaPointVisible: false,
-        pinVisible: false
-    });
-    
-    // 3. Xaritaga yangi toza yo'nalishni qo'shamiz
-    myMap.geoObjects.add(window.multiRoute);
-}
+                // 1. Haydovchi markerini yangilash
+                if (!driverMarker) {
+                    driverMarker = new ymaps.Placemark(coords, {}, { 
+                        iconLayout: 'default#image', 
+                        iconImageHref: 'https://cdn-icons-png.flaticon.com/512/741/741407.png', 
+                        iconImageSize: [40, 40],
+                        iconImageOffset: [-20, -20]
+                    });
+                    myMap.geoObjects.add(driverMarker);
+                } else {
+                    driverMarker.geometry.setCoordinates(coords);
+                }
 
-// 1. O'zgaruvchini funksiyadan tashqarida e'lon qilamiz
-let multiRoute = null;
+                // 2. Yo'nalish chizish (Faqat mijoz kutilayotganda)
+                if (!isTripStarted && clat && clon) {
+                    drawRoute(curLat, curLon, clat, clon);
+                }
 
-function drawRoute(sLat, sLon, eLat, eLon) {
-    const startCoords = [sLat, sLon];
-    const endCoords = [parseFloat(eLat), parseFloat(eLon)];
+                // 3. Masofa hisoblash (Faqat safar boshlanganda)
+                if (isTripStarted && lastPos) {
+                    const d = ymaps.coordSystem.geo.getDistance([lastPos.lat, lastPos.lon], coords);
+                    if (d > 2) { 
+                        totalDist += d;
+                        updateUI();
+                    }
+                }
+                lastPos = { lat: curLat, lon: curLon };
 
-    if (multiRoute) {
-        // 2. AGAR YO'NALISH BO'LSA: Uni o'chirib tashlamaymiz, 
-        // shunchaki yangi nuqtalarni beramiz. Bu markerlar ko'payishini oldini oladi.
-        multiRoute.model.setReferencePoints([startCoords, endCoords]);
-    } else {
-        // 3. AGAR YO'NALISH BO'LMASA: Birinchi marta yaratamiz
-        multiRoute = new ymaps.multiRouter.MultiRoute({
-            referencePoints: [startCoords, endCoords],
-            params: { routingMode: 'auto' }
-        }, {
-            boundsAutoApply: false,
-            routeActiveStrokeColor: "#FFD700",
-            routeActiveStrokeWidth: 5,
-            // Markerlarni butunlay o'chirish
-            wayPointVisible: false,
-            viaPointVisible: false,
-            pinVisible: false
-        });
-        myMap.geoObjects.add(multiRoute);
-    }
-}
+                // 4. Firebase'ni yangilash
+                if(orderId) {
+                    db.ref('orders/' + orderId).update({
+                        driver_lat: curLat,
+                        driver_lon: curLon
+                    });
+                }
+            }, err => console.error(err), { enableHighAccuracy: true });
+        }
 
+        function drawRoute(sLat, sLon, eLat, eLon) {
+            const startCoords = [sLat, sLon];
+            const endCoords = [parseFloat(eLat), parseFloat(eLon)];
+
+            if (multiRoute) {
+                multiRoute.model.setReferencePoints([startCoords, endCoords]);
+            } else {
+                multiRoute = new ymaps.multiRouter.MultiRoute({
+                    referencePoints: [startCoords, endCoords],
+                    params: { routingMode: 'auto' }
+                }, {
+                    boundsAutoApply: false,
+                    routeActiveStrokeColor: "#FFD700",
+                    routeActiveStrokeWidth: 5,
+                    wayPointVisible: false,
+                    pinVisible: false
+                });
+                myMap.geoObjects.add(multiRoute);
+            }
+        }
 
         function updateUI() {
             const km = totalDist / 1000;
             const startPrice = 5000; 
             const kmPrice = 2500;    
-            
             const price = startPrice + (km * kmPrice);
             const finalPrice = Math.round(price / 500) * 500;
 
@@ -184,7 +156,10 @@ function drawRoute(sLat, sLon, eLat, eLon) {
             document.getElementById('status').innerText = "🏁 Mijoz kutilmoqda";
             document.getElementById('btnArrived').style.display = 'none';
             document.getElementById('btnStart').style.display = 'inline-block';
-            if (multiRoute) myMap.geoObjects.remove(multiRoute);
+            if (multiRoute) {
+                myMap.geoObjects.remove(multiRoute);
+                multiRoute = null;
+            }
             if(orderId) db.ref('orders/' + orderId).update({ status: "arrived" });
         }
 
@@ -214,6 +189,7 @@ function drawRoute(sLat, sLon, eLat, eLon) {
                 alert("ID topilmadi!");
                 return;
             }
+            // Buyurtma ID-si orqali foydalanuvchi ma'lumotlarini olamiz
             db.ref('users/' + orderId).once('value', (snapshot) => {
                 const userData = snapshot.val();
                 if (userData && userData.phone) {
