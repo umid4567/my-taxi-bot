@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="uz">
 <head>
     <title>AXI TAXI - Taksimetr</title>
     <meta charset="utf-8" />
@@ -25,7 +25,7 @@
     <div id="map"></div>
     <div class="taxi-panel">
         <div id="status">🚕 Mijozga borilmoqda...</div>
-        <div class="distance-display"><span id="km">0.0</span> km</div>
+        <div class="distance-display"><span id="km">0.00</span> km</div>
         <div class="price-display"><span id="summa">0</span> so'm</div>
         
         <button id="btnArrived" class="btn btn-arrived" onclick="arrived()">🏁 Keldim</button>
@@ -45,7 +45,6 @@
         const db = firebase.database();
 
         const params = new URLSearchParams(window.location.search);
-        // Universal ID olish: order_id yoki id
         const orderId = params.get('order_id') || params.get('id'); 
         const clat = params.get('clat');
         const clon = params.get('clon');
@@ -68,59 +67,67 @@
         }
 
         function startTracking() {
-    navigator.geolocation.watchPosition(p => {
-        const cur = { lat: p.coords.latitude, lon: p.coords.longitude };
-        const coords = [cur.lat, cur.lon];
+            navigator.geolocation.watchPosition(p => {
+                const cur = { lat: p.coords.latitude, lon: p.coords.longitude };
+                const coords = [cur.lat, cur.lon];
 
-        // Haydovchi markerini yangilash
-        if (!driverMarker) {
-            driverMarker = new ymaps.Placemark(coords, {}, { iconLayout: 'default#image', iconImageHref: 'https://cdn-icons-png.flaticon.com/512/741/741407.png', iconImageSize: [40, 40] });
-            myMap.geoObjects.add(driverMarker);
-        } else {
-            driverMarker.geometry.setCoordinates(coords);
-        }
+                if (!driverMarker) {
+                    driverMarker = new ymaps.Placemark(coords, {}, { 
+                        iconLayout: 'default#image', 
+                        iconImageHref: 'https://cdn-icons-png.flaticon.com/512/741/741407.png', 
+                        iconImageSize: [40, 40] 
+                    });
+                    myMap.geoObjects.add(driverMarker);
+                } else {
+                    driverMarker.geometry.setCoordinates(coords);
+                }
 
-        // MIJOZGA HAYDOVCHI KOORDINATASINI YUBORISH (orders papkasiga)
-        if(orderId) {
-            db.ref('orders/' + orderId).update({
-                driver_lat: cur.lat,
-                driver_lon: cur.lon,
-                status: isTripStarted ? "riding" : (document.getElementById('btnStart').style.display === 'inline-block' ? "arrived" : "coming")
-            });
+                // Safar davomida masofani hisoblash
+                if (isTripStarted && lastPos) {
+                    const d = ymaps.coordSystem.geo.getDistance([lastPos.lat, lastPos.lon], coords);
+                    if (d > 2) { // 2 metrdan ortiq siljish bo'lsa hisoblaymiz
+                        totalDist += d;
+                        updateUI();
+                    }
+                }
+                lastPos = cur;
+
+                // Koordinatalarni Firebase'ga yuborish (Mijoz kuzatishi uchun)
+                if(orderId) {
+                    db.ref('orders/' + orderId).update({
+                        driver_lat: cur.lat,
+                        driver_lon: cur.lon
+                    });
+                }
+            }, err => console.error(err), { enableHighAccuracy: true });
         }
-        // ... masofa hisoblash qismi ...
-    }, err => console.error(err), { enableHighAccuracy: true });
-}
 
         function drawRoute(lat, lon) {
             multiRoute = new ymaps.multiRouter.MultiRoute({
-                referencePoints: [lastPos ? [lastPos.lat, lastPos.lon] : [39.94, 66.26], [parseFloat(lat), parseFloat(lon)]],
+                referencePoints: [[39.9469, 66.2625], [parseFloat(lat), parseFloat(lon)]],
                 params: { routingMode: 'auto' }
             }, { boundsAutoApply: true, routeActiveStrokeColor: "#FFD700" });
             myMap.geoObjects.add(multiRoute);
         }
 
         function updateUI() {
-    const km = totalDist / 1000; // Metrni km ga o'tkazish
-    
-    // TARIF: 5000 boshlang'ich + har km uchun 2500
-    const price = 5000 + (km * 2500); 
-    const finalPrice = Math.round(price / 500) * 500; // 500 so'mga yaxlitlash
+            const km = totalDist / 1000;
+            const startPrice = 5000; // O'tirish narxi
+            const kmPrice = 2500;    // Har bir km narxi
+            
+            const price = startPrice + (km * kmPrice);
+            const finalPrice = Math.round(price / 500) * 500;
 
-    // Ekranda ko'rsatish
-    document.getElementById('km').innerText = km.toFixed(2);
-    document.getElementById('summa').innerText = finalPrice;
-    
-    // MIJOZGA YUBORISH (Firebase'dagi orders papkasiga)
-    if(orderId) {
-        db.ref('orders/' + orderId).update({ 
-            km: km.toFixed(2), 
-            price: finalPrice 
-        });
-    }
-}
-
-
+            document.getElementById('km').innerText = km.toFixed(2);
+            document.getElementById('summa').innerText = finalPrice;
+            
+            if(orderId) {
+                db.ref('orders/' + orderId).update({ 
+                    km: km.toFixed(2), 
+                    price: finalPrice 
+                });
+            }
+        }
 
         function arrived() {
             document.getElementById('status').innerText = "🏁 Mijoz kutilmoqda";
@@ -133,28 +140,28 @@
         function startTrip() {
             isTripStarted = true;
             totalDist = 0;
-            document.getElementById('status').innerText = "🚕 Safar davom etmoqda...";
+            document.getElementById('status').innerText = "🚀 Safar davom etmoqda...";
             document.getElementById('btnStart').style.display = 'none';
             document.getElementById('btnFinish').style.display = 'inline-block';
-            if(orderId) db.ref('trips/' + orderId).update({ status: "riding" });
+            if(orderId) db.ref('orders/' + orderId).update({ status: "riding", km: "0.00", price: 5000 });
         }
 
         function finishTrip() {
             const finalSum = document.getElementById('summa').innerText;
             if(orderId) {
-                db.ref('trips/' + orderId).update({ status: "finished" });
-                db.ref('orders/' + orderId).remove(); // Buyurtmani tozalash
+                db.ref('orders/' + orderId).update({ status: "finished" });
+                // 5 soniyadan keyin buyurtmani o'chirish (yo'lovchi natijani ko'rishi uchun)
+                setTimeout(() => {
+                    db.ref('orders/' + orderId).remove();
+                }, 5000);
             }
             tg.sendData("finish_" + finalSum);
             setTimeout(() => tg.close(), 500);
         }
         
         function callClient() {
-            if (orderId && orderId !== "null") {
-                const profileLink = "https://t.me/user?id=" + orderId;
-                tg.openTelegramLink(profileLink);
-            } else {
-                alert("Mijoz ID-si topilmadi!");
+            if (orderId) {
+                tg.openTelegramLink("https://t.me/user?id=" + orderId);
             }
         }
 
