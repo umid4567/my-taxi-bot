@@ -55,70 +55,74 @@
 
         function init() {
     ymaps.ready(() => {
-        // Markazni mijoz koordinatalariga (clat, clon) o'rnatamiz
-        const centerCoords = (clat && clon) ? [parseFloat(clat), parseFloat(clon)] : [39.9469, 66.2625];
-        
+        // Xarita markazini mijoz turgan joyga (clat, clon) qaratamiz
+        const clientLat = parseFloat(clat);
+        const clientLon = parseFloat(clon);
+
         myMap = new ymaps.Map("map", { 
-            center: centerCoords, 
-            zoom: 16, // Biroq yaqinroq qilamiz
+            center: [clientLat, clientLon], 
+            zoom: 14,
             controls: ['zoomControl', 'geolocationControl']
         });
         
         startTracking();
-        if(clat && clon) drawRoute(clat, clon);
     });
 }
 
-
-        function startTracking() {
+function startTracking() {
     navigator.geolocation.watchPosition(p => {
-        const cur = { lat: p.coords.latitude, lon: p.coords.longitude };
-        const coords = [cur.lat, cur.lon];
+        const curLat = p.coords.latitude;
+        const curLon = p.coords.longitude;
+        const coords = [curLat, curLon];
 
-        // Haydovchi markerini yangilash
+        // 1. Haydovchi markerini yangilash
         if (!driverMarker) {
             driverMarker = new ymaps.Placemark(coords, {}, { 
                 iconLayout: 'default#image', 
                 iconImageHref: 'https://cdn-icons-png.flaticon.com/512/741/741407.png', 
-                iconImageSize: [40, 40] 
+                iconImageSize: [40, 40],
+                iconImageOffset: [-20, -20]
             });
             myMap.geoObjects.add(driverMarker);
-            
-            // AGAR YO'NALISH CHIZILMAGAN BO'LSA, SHU YERDA CHIZAMIZ
-            if(clat && clon && !multiRoute) {
-                drawRoute(cur.lat, cur.lon, clat, clon);
-            }
         } else {
             driverMarker.geometry.setCoordinates(coords);
         }
-        
-        // ... qolgan kodlar (totalDist, Firebase update) ...
-    });
+
+        // 2. Yo'nalishni FAQAT haydovchi joyi aniqlanganda chizamiz
+        // Haydovchidan (cur) -> Mijozgacha (clat, clon)
+        if (clat && clon) {
+            drawRoute(curLat, curLon, clat, clon);
+        }
+
+        // 3. Firebase'ni yangilash
+        if(orderId) {
+            db.ref('orders/' + orderId).update({
+                driver_lat: curLat,
+                driver_lon: curLon
+            });
+        }
+    }, err => console.error(err), { enableHighAccuracy: true });
 }
 
-// drawRoute funksiyasini 4 ta parametrli qilamiz
-function drawRoute(startLat, startLon, endLat, endLon) {
-    if (multiRoute) myMap.geoObjects.remove(multiRoute);
+function drawRoute(sLat, sLon, eLat, eLon) {
+    // Agar eski yo'nalish bo'lsa o'chiramiz
+    if (multiRoute) {
+        myMap.geoObjects.remove(multiRoute);
+    }
 
     multiRoute = new ymaps.multiRouter.MultiRoute({
-        // 1-nuqta: Haydovchining turgan joyi (moshina)
-        // 2-nuqta: Mijozning turgan joyi (A/B nuqta)
-        referencePoints: [
-            [startLat, startLon], 
-            [parseFloat(endLat), parseFloat(endLon)]
-        ],
-        params: { 
-            routingMode: 'auto' 
-        }
+        // START: Haydovchi, END: Mijoz
+        referencePoints: [[sLat, sLon], [parseFloat(eLat), parseFloat(eLon)]],
+        params: { routingMode: 'auto' }
     }, { 
-        boundsAutoApply: true, 
+        boundsAutoApply: false, // Xarita doimiy sakrab ketmasligi uchun false qildik
         routeActiveStrokeColor: "#FFD700",
-        // Ortiqcha markerlarni o'chiramiz, chunki bizda moshina belgisi bor
-        wayPointVisible: false 
+        wayPointVisible: false // Ortiqcha markerlarni o'chiradi
     });
     
     myMap.geoObjects.add(multiRoute);
 }
+
 
 
 
