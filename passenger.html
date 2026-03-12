@@ -10,17 +10,23 @@
     
     <style>
         body { font-family: 'Segoe UI', sans-serif; margin: 0; background: #f4f4f4; overflow: hidden; }
-        #map { width: 100%; height: 65vh; background: #e5e3db; }
+        #map { width: 100%; height: 60vh; background: #e5e3db; } /* Balandlikni biroz kamaytirdik */
         .card { 
-            position: fixed; bottom: 0; width: 100%; height: 35vh;
+            position: fixed; bottom: 0; width: 100%; height: 40vh; /* Balandlikni biroz oshirdik tugma sig'ishi uchun */
             background: white; padding: 20px; border-radius: 25px 25px 0 0; 
             box-shadow: 0 -10px 20px rgba(0,0,0,0.1); box-sizing: border-box; text-align: center;
         }
-        .price { font-size: 42px; color: #28a745; font-weight: bold; margin: 5px 0; }
+        .price { font-size: 36px; color: #28a745; font-weight: bold; margin: 5px 0; }
         .status-badge { display: inline-block; padding: 6px 15px; border-radius: 20px; font-size: 12px; font-weight: bold; text-transform: uppercase; margin-bottom: 10px; }
         .status-coming { background: #fff3e0; color: #ef6c00; }
         .status-arrived { background: #e3f2fd; color: #1565c0; }
         .status-riding { background: #e8f5e9; color: #2e7d32; }
+        /* Qo'ng'iroq tugmasi stili */
+        #btnCallDriver { 
+            display: none; width: 100%; padding: 15px; margin-top: 15px; 
+            background: #28a745; color: white; border: none; border-radius: 15px; 
+            font-weight: bold; font-size: 16px; cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -29,11 +35,10 @@
         <div id="status_badge" class="status-badge status-coming">KUTILMOQDA</div>
         <div style="color: #666; font-size: 14px;">To'lov:</div>
         <div class="price"><span id="p_price">0</span> so'm</div>
-        <div id="p_info" style="margin-top: 10px; color: #333; font-weight: 500;">Ma'lumotlar olinmoqda...</div>
+        <div id="p_info" style="margin-top: 5px; color: #333; font-weight: 500;">Ma'lumotlar olinmoqda...</div>
+        
+        <button id="btnCallDriver" onclick="callDriver()">📞 HAYDOVCHIGA QO'NG'IROQ</button>
     </div>
-
-        <button id="btnCallDriver" style="display:none; width:100%; padding:15px; margin-top:10px; background:#28a745; color:white; border:none; border-radius:15px; font-weight:bold; font-size:16px;" onclick="callDriver()">📞 HAYDOVCHIGA QO'NG'IROQ</button>
-
 
     <script>
         const config = { databaseURL: "https://umut-taxi-default-rtdb.europe-west1.firebasedatabase.app/" };
@@ -43,7 +48,7 @@
         const urlParams = new URLSearchParams(window.location.search);
         const orderId = urlParams.get('order_id');
 
-        let myMap, taxiMarker;
+        let myMap, taxiMarker, driverPhone = null; // Raqam uchun o'zgaruvchi
 
         ymaps.ready(() => {
             myMap = new ymaps.Map("map", { center: [39.9469, 66.2625], zoom: 15, controls: ['zoomControl'] });
@@ -53,15 +58,12 @@
                 return;
             }
 
-            // Real-time kuzatish
             db.ref('orders/' + orderId).on('value', (snapshot) => {
                 const data = snapshot.val();
                 if (!data) return;
 
-                // 1. Narxni chiqarish
                 document.getElementById('p_price').innerText = data.price ? data.price.toLocaleString() : "0";
 
-                // 2. Statusni yangilash
                 const badge = document.getElementById('status_badge');
                 const info = document.getElementById('p_info');
 
@@ -79,7 +81,17 @@
                     info.innerText = (data.km || "0.0") + " km yo'l bosildi";
                 }
 
-                // 3. Xaritada haydovchini ko'rsatish
+                // --- QO'NG'IROQ MANTIQINI SHU YERGA QO'SHDIK ---
+                if (data.driver_id) {
+                    db.ref('users/' + data.driver_id).once('value', (uSnap) => {
+                        const uData = uSnap.val();
+                        if (uData && uData.phone) {
+                            driverPhone = uData.phone;
+                            document.getElementById('btnCallDriver').style.display = 'block';
+                        }
+                    });
+                }
+
                 if (data.driver_lat && data.driver_lon) {
                     const pos = [data.driver_lat, data.driver_lon];
                     if (!taxiMarker) {
@@ -96,6 +108,15 @@
                 }
             });
         });
+
+        // TUGMA BOSILGANDA ISHLAYDIGAN FUNKSIYA
+        function callDriver() {
+            if (driverPhone) {
+                window.location.href = "tel:" + driverPhone;
+            } else {
+                alert("Haydovchi telefon raqami topilmadi!");
+            }
+        }
     </script>
 </body>
 </html>
