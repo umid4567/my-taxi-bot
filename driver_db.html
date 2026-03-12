@@ -77,20 +77,30 @@
         }, err => console.error("Firebase o'qishda xato:", err));
 
         function showOrder(order) {
-            document.getElementById('waiting').style.display = 'none';
-            document.getElementById('orderBox').style.display = 'block';
-            document.getElementById('clientName').innerText = order.name;
-            
-            // Ovoz chiqarish
-            const sound = document.getElementById('orderSound');
-            sound.play().catch(() => {});
+    document.getElementById('waiting').style.display = 'none';
+    document.getElementById('orderBox').style.display = 'block';
+    document.getElementById('clientName').innerText = order.name;
+    
+    // Ovoz chiqarish
+    const sound = document.getElementById('orderSound');
+    sound.play().catch(() => {});
 
-            // Yandex kutubxonasi tayyor bo'lishini kutamiz
-            if (myPos && typeof ymaps !== 'undefined' && ymaps.coordSystem) {
-                const d = ymaps.coordSystem.geo.getDistance(myPos, [order.lat, order.lon]);
-                document.getElementById('distance').innerText = (d / 1000).toFixed(1);
-            }
+    // Masofani qayta-qayta tekshirib hisoblash
+    const updateDistance = () => {
+        if (myPos && typeof ymaps !== 'undefined' && ymaps.coordSystem) {
+            const d = ymaps.coordSystem.geo.getDistance(myPos, [order.lat, order.lon]);
+            const km = (d / 1000).toFixed(1);
+            document.getElementById('distance').innerText = km;
+            console.log("Masofa yangilandi:", km);
+        } else {
+            document.getElementById('distance').innerText = "Aniqlanmoqda...";
+            // Agar koordinata hali kelmagan bo'lsa, 1 soniyadan keyin qayta urinib ko'radi
+            setTimeout(updateDistance, 1000);
         }
+    };
+
+    updateDistance();
+}
 
         function hideOrder() {
             document.getElementById('waiting').style.display = 'block';
