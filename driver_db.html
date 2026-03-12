@@ -99,17 +99,29 @@
         }
 
         function acceptOrder() {
-            if (!currentOrder) return;
-            
-            // Statusni o'zgartirish
-            db.ref('orders/' + currentOrder.id).update({
-                status: "accepted",
-                driver_id: driverId
-            }).then(() => {
-                // Xaritaga o'tish (fayl nomi aniq index.html ekanligini tekshiring)
-                window.location.href = `index.html?order_id=${currentOrder.id}&clat=${currentOrder.lat}&clon=${currentOrder.lon}`;
-            }).catch(err => alert("Xatolik: " + err.message));
-        }
+    // 1. Agar biron sabab bilan currentOrder bo'sh bo'lsa, xato bermasligi uchun tekshiramiz
+    if (!currentOrder || !currentOrder.id) {
+        alert("Xatolik: Buyurtma ma'lumotlari yuklanmadi. Iltimos, bir oz kuting.");
+        return;
+    }
+
+    const oId = currentOrder.id;
+    const oLat = currentOrder.lat;
+    const oLon = currentOrder.lon;
+
+    // 2. Bazada zakaz statusini darrov o'zgartiramiz
+    db.ref('orders/' + oId).update({
+        status: "accepted",
+        driver_id: driverId
+    }).then(() => {
+        console.log("Zakaz qabul qilindi!");
+        // 3. Xaritaga o'tish (URLni aniq va xavfsiz qilib yuboramiz)
+        window.location.href = `index.html?order_id=${oId}&clat=${oLat}&clon=${oLon}`;
+    }).catch(err => {
+        alert("Bazaga yozishda xato: " + err.message);
+    });
+}
+
 
         function rejectOrder() {
             hideOrder();
