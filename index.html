@@ -18,7 +18,7 @@
         .btn-arrived { background: #ffc107; color: black; }
         .btn-start { background: #28a745; color: white; display: none; }
         .btn-finish { background: #dc3545; color: white; display: none; }
-        .btn-call { background: #0088cc; color: white; margin-top: 10px; }
+        .btn-call { background: #28a745; color: white; margin-top: 10px; }
     </style>
 </head>
 <body>
@@ -32,7 +32,8 @@
         <button id="btnStart" class="btn btn-start" onclick="startTrip()">🚀 Safarni boshlash</button>
         <button id="btnFinish" class="btn btn-finish" onclick="finishTrip()">🏁 Safarni yakunlash</button>
         
-        <button class="btn" style="background: #28a745;" onclick="callClient()">📞 MIJOZGA QO'NG'IROQ</button>
+        <button class="btn btn-call" onclick="callClient()">📞 MIJOZGA QO'NG'IROQ</button>
+    </div>
 
     <script>
         const tg = window.Telegram.WebApp;
@@ -81,17 +82,15 @@
                     driverMarker.geometry.setCoordinates(coords);
                 }
 
-                // Safar davomida masofani hisoblash
                 if (isTripStarted && lastPos) {
                     const d = ymaps.coordSystem.geo.getDistance([lastPos.lat, lastPos.lon], coords);
-                    if (d > 2) { // 2 metrdan ortiq siljish bo'lsa hisoblaymiz
+                    if (d > 2) { 
                         totalDist += d;
                         updateUI();
                     }
                 }
                 lastPos = cur;
 
-                // Koordinatalarni Firebase'ga yuborish (Mijoz kuzatishi uchun)
                 if(orderId) {
                     db.ref('orders/' + orderId).update({
                         driver_lat: cur.lat,
@@ -111,8 +110,8 @@
 
         function updateUI() {
             const km = totalDist / 1000;
-            const startPrice = 5000; // O'tirish narxi
-            const kmPrice = 2500;    // Har bir km narxi
+            const startPrice = 5000; 
+            const kmPrice = 2500;    
             
             const price = startPrice + (km * kmPrice);
             const finalPrice = Math.round(price / 500) * 500;
@@ -149,7 +148,6 @@
             const finalSum = document.getElementById('summa').innerText;
             if(orderId) {
                 db.ref('orders/' + orderId).update({ status: "finished" });
-                // 5 soniyadan keyin buyurtmani o'chirish (yo'lovchi natijani ko'rishi uchun)
                 setTimeout(() => {
                     db.ref('orders/' + orderId).remove();
                 }, 5000);
@@ -159,18 +157,19 @@
         }
         
         function callClient() {
-    // Firebase-dan mijozning raqamini bir martalik o'qib olamiz
-    db.ref('users/' + orderId).once('value', (snapshot) => {
-        const userData = snapshot.val();
-        if (userData && userData.phone) {
-            // Telefon raqami bo'lsa, qo'ng'iroq oynasini ochamiz
-            window.location.href = "tel:" + userData.phone;
-        } else {
-            alert("Mijoz telefon raqamini kiritmagan!");
+            if (!orderId) {
+                alert("ID topilmadi!");
+                return;
+            }
+            db.ref('users/' + orderId).once('value', (snapshot) => {
+                const userData = snapshot.val();
+                if (userData && userData.phone) {
+                    window.location.href = "tel:" + userData.phone;
+                } else {
+                    alert("Mijoz telefon raqami topilmadi!");
+                }
+            });
         }
-    });
-}
-
 
         window.onload = init;
     </script>
