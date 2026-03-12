@@ -159,10 +159,18 @@
         }
         
         function callClient() {
-            if (orderId) {
-                tg.openTelegramLink("https://t.me/user?id=" + orderId);
-            }
+    // Firebase-dan mijozning raqamini bir martalik o'qib olamiz
+    db.ref('users/' + orderId).once('value', (snapshot) => {
+        const userData = snapshot.val();
+        if (userData && userData.phone) {
+            // Telefon raqami bo'lsa, qo'ng'iroq oynasini ochamiz
+            window.location.href = "tel:" + userData.phone;
+        } else {
+            alert("Mijoz telefon raqamini kiritmagan!");
         }
+    });
+}
+
 
         window.onload = init;
     </script>
