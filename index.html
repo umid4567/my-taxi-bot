@@ -104,20 +104,24 @@ function startTracking() {
     }, err => console.error(err), { enableHighAccuracy: true });
 }
 
-function drawRoute(sLat, sLon, eLat, eLon) {
-    // Agar eski yo'nalish bo'lsa o'chiramiz
+        function drawRoute(sLat, sLon, eLat, eLon) {
+    // 1. Agar eski yo'nalish bo'lsa, uni xaritadan butunlay o'chiramiz (Markerlari bilan birga)
     if (multiRoute) {
         myMap.geoObjects.remove(multiRoute);
+        multiRoute.destroy(); // Bu barcha eski markerlarni (A, B) tozalaydi
+        multiRoute = null;
     }
 
+    // 2. Yangi yo'nalish chizamiz
     multiRoute = new ymaps.multiRouter.MultiRoute({
-        // START: Haydovchi, END: Mijoz
         referencePoints: [[sLat, sLon], [parseFloat(eLat), parseFloat(eLon)]],
         params: { routingMode: 'auto' }
     }, { 
-        boundsAutoApply: false, // Xarita doimiy sakrab ketmasligi uchun false qildik
+        boundsAutoApply: false, // Xarita har gal sakrab ketmasligi uchun
         routeActiveStrokeColor: "#FFD700",
-        wayPointVisible: false // Ortiqcha markerlarni o'chiradi
+        // Faqatgina yo'l chizig'i qolishi uchun markerlarni yashiramiz
+        wayPointVisible: false, 
+        viaPointVisible: false
     });
     
     myMap.geoObjects.add(multiRoute);
