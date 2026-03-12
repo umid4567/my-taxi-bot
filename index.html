@@ -151,9 +151,12 @@
         }
         
         function callClient() {
-    // orderId - bu mijozning Telegram ID-si. 
-    // Bu link bosilganda Telegram mijozning profilini ochadi va tepada "Qo'ng'iroq qilish" chiqadi
-    window.location.href = "tg://user?id=" + orderId;
+    if (orderId) {
+        // Telegram Web App orqali tashqi havolani ochish
+        tg.openTelegramLink("https://t.me/user?id=" + orderId);
+    } else {
+        alert("Mijoz ID-si xato!");
+    }
 }
 
 
