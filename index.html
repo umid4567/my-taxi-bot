@@ -9,19 +9,21 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <script src="https://api-maps.yandex.ru/2.1/?lang=uz_UZ&apikey=087cbcce-d8e3-46e1-be82-29127bd69ae5" type="text/javascript"></script>
     <style>
-        body { font-family: sans-serif; margin: 0; background: #1a1a1a; color: white; text-align: center; }
-        #map { width: 100%; height: 50vh; }
-        .panel { padding: 20px; background: #222; border-top: 3px solid #fbc02d; }
-        .summa { font-size: 45px; font-weight: bold; color: #4caf50; margin: 10px 0; }
+        body { font-family: sans-serif; margin: 0; background: #1a1a1a; color: white; text-align: center; overflow: hidden; }
+        /* Xarita balandligini to'g'riladik */
+        #map { width: 100%; height: 60vh; background: #222; }
+        .panel { height: 40vh; padding: 15px; background: #222; border-top: 3px solid #fbc02d; box-sizing: border-box; }
+        .summa { font-size: 45px; font-weight: bold; color: #4caf50; margin: 5px 0; }
         .btn { width: 90%; padding: 15px; margin: 10px; border: none; border-radius: 10px; font-size: 18px; font-weight: bold; cursor: pointer; }
         .start { background: #4caf50; color: white; }
         .stop { background: #f44336; color: white; }
+        #info { font-size: 20px; color: #bbb; }
     </style>
 </head>
 <body>
     <div id="map"></div>
     <div class="panel">
-        <div id="status">Kuting...</div>
+        <div id="status">Kattakurgan - Haydovchi paneli</div>
         <div class="summa"><span id="price">0</span> so'm</div>
         <div id="info">0.0 km</div>
         <button id="btnAction" class="btn start" onclick="toggleTrip()">SAFARNI BOSHLASH</button>
@@ -29,12 +31,32 @@
 
     <script>
         const tg = window.Telegram.WebApp;
+        tg.expand(); // Web Appni to'liq ekranga ochish
+
         const config = { databaseURL: "https://umut-taxi-default-rtdb.europe-west1.firebasedatabase.app/" };
         firebase.initializeApp(config);
         const db = firebase.database();
 
-        let isRunning = false, totalDist = 0, lastPos = null, watchId = null;
+        let isRunning = false, totalDist = 0, lastPos = null, watchId = null, myMap, driverPlacemark;
         const orderId = new URLSearchParams(window.location.search).get('order_id') || "test_trip";
+
+        // --- XARITANI ISHGA TUSHIRISH ---
+        ymaps.ready(init);
+        function init() {
+            myMap = new ymaps.Map("map", {
+                center: [39.9976, 66.2657], // Kattakurgan
+                zoom: 15,
+                controls: ['zoomControl', 'geolocationControl']
+            });
+
+            // Haydovchi belgisi (Marker)
+            driverPlacemark = new ymaps.Placemark(myMap.getCenter(), {}, {
+                preset: 'islands#navigationYellowCircleIcon'
+            });
+            myMap.geoObjects.add(driverPlacemark);
+            
+            document.getElementById('status').innerText = "Xarita tayyor. Safarni boshlashingiz mumkin.";
+        }
 
         function toggleTrip() {
             const btn = document.getElementById('btnAction');
@@ -44,33 +66,54 @@
                 btn.className = "btn stop";
                 startTracking();
             } else {
-                navigator.geolocation.clearWatch(watchId);
-                tg.close();
+                stopTrip();
             }
         }
 
         function startTracking() {
             watchId = navigator.geolocation.watchPosition(p => {
                 const cur = { lat: p.coords.latitude, lon: p.coords.longitude };
+                
+                // Xaritadagi markerni yangilash
+                if (driverPlacemark) {
+                    driverPlacemark.geometry.setCoordinates([cur.lat, cur.lon]);
+                    myMap.setCenter([cur.lat, cur.lon]);
+                }
+
                 if (lastPos) {
                     const d = ymaps.coordSystem.geo.getDistance([lastPos.lat, lastPos.lon], [cur.lat, cur.lon]);
                     totalDist += d;
                     const km = totalDist / 1000;
-                    const price = 5000 + (km * 2000); // 5000 kirish, 2000 har km uchun
+                    const price = 5000 + (km * 2000); // 5000 start, 2000 per km
                     const finalPrice = Math.round(price / 500) * 500;
                     
                     document.getElementById('price').innerText = finalPrice;
                     document.getElementById('info').innerText = km.toFixed(1) + " km";
 
+                    // Firebase-ga jonli yuborish
                     db.ref('trips/' + orderId).set({
                         lat: cur.lat, lon: cur.lon,
-                        price: finalPrice, km: km.toFixed(1)
+                        price: finalPrice, km: km.toFixed(1),
+                        status: "on_way"
                     });
                 }
                 lastPos = cur;
-            }, null, { enableHighAccuracy: true });
+            }, e => console.log(e), { enableHighAccuracy: true });
+        }
+
+        function stopTrip() {
+            const finalPrice = document.getElementById('price').innerText;
+            navigator.geolocation.clearWatch(watchId);
+            
+            // Botga ma'lumot yuborish
+            tg.sendData("finish_" + finalPrice); 
+            
+            db.ref('trips/' + orderId).update({ status: "finished" });
+            
+            setTimeout(() => {
+                tg.close();
+            }, 500);
         }
     </script>
 </body>
 </html>
-
