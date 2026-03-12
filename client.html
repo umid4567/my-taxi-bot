@@ -1,62 +1,94 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>AXI TAXI - Mijoz xaritasi</title>
+    <title>AXI TAXI - Haydovchini kuzatish</title>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <script src="https://api-maps.yandex.ru/2.1/?lang=uz_UZ&apikey=f3032742-990a-427c-9407-7393430f89d3" type="text/javascript"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <script src="https://api-maps.yandex.ru/2.1/?lang=uz_UZ&apikey=f3032742-990a-427c-9407-7393430f89d3" type="text/javascript"></script>
+    
+    <style>
+        body, html, #map { margin: 0; padding: 0; width: 100%; height: 100%; background: #1a1a1a; }
+        .info-box {
+            position: fixed; top: 10px; left: 10px; right: 10px;
+            background: rgba(0,0,0,0.8); color: white; padding: 15px;
+            border-radius: 10px; border: 1px solid #FFD700;
+            text-align: center; z-index: 1000; font-family: sans-serif;
+        }
+    </style>
 </head>
-<body style="margin: 0; padding: 0;">
-    <div id="map" style="width: 100vw; height: 100vh; background: #eee;"></div>
+<body>
+    <div class="info-box" id="status-text">🚕 Haydovchi kutilmoqda...</div>
+    <div id="map"></div>
     
     <script>
-        // Firebase sozlamalari
-        const firebaseConfig = {
-            databaseURL: "https://umut-taxi-default-rtdb.europe-west1.firebasedatabase.app/"
-        };
-        firebase.initializeApp(firebaseConfig);
-        const database = firebase.database();
+        // 1. Firebase Sozlamalari
+        const firebaseConfig = { databaseURL: "https://umut-taxi-default-rtdb.europe-west1.firebasedatabase.app/" };
+        if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
+        const db = firebase.database();
+
+        // 2. URL'dan ma'lumotlarni olish
+        const urlParams = new URLSearchParams(window.location.search);
+        const orderId = urlParams.get('order_id');
+
+        let myMap;
+        let driverMarker = null;
 
         ymaps.ready(init);
 
         function init() {
-            // Xaritani markazlashtirish (Kattaqo'rg'on)
-            let myMap = new ymaps.Map("map", {
-                center: [39.9469, 66.2625],
-                zoom: 14,
-                controls: ['zoomControl', 'fullscreenControl']
+            myMap = new ymaps.Map("map", {
+                center: [39.9469, 66.2625], // Kattaqo'rg'on markazi
+                zoom: 15,
+                controls: ['zoomControl', 'geolocationControl']
             });
 
-            let driverMarkers = {}; // Hamma haydovchilarni saqlash uchun
+            if (orderId) {
+                trackThisOrder();
+            } else {
+                document.getElementById('status-text').innerText = "❌ Buyurtma topilmadi";
+            }
+        }
 
-            // Bazadan haydovchilar lokatsiyasini real vaqtda olish
-            database.ref('driver_location').on('value', (snapshot) => {
-                const drivers = snapshot.val();
-                if (!drivers) return;
+        function trackThisOrder() {
+            // Aynan shu buyurtma bo'yicha haydovchi harakatini kuzatish
+            db.ref('trips/' + orderId).on('value', (snapshot) => {
+                const data = snapshot.val();
+                if (!data) return;
 
-                for (let id in drivers) {
-                    const loc = drivers[id];
-                    
-                    // Agar haydovchi xaritada bo'lsa, joyini yangilaymiz
-                    if (driverMarkers[id]) {
-                        driverMarkers[id].geometry.setCoordinates([loc.lat, loc.lon]);
-                    } else {
-                        // Agar yangi haydovchi bo'lsa, belgi qo'shamiz
-                        driverMarkers[id] = new ymaps.Placemark([loc.lat, loc.lon], {
-                            hintContent: 'Taksi kelmoqda',
-                            balloonContent: 'Haydovchi liniyada'
-                        }, {
-                            preset: 'islands#autoIcon',
-                            iconColor: '#ff0000'
-                        });
-                        myMap.geoObjects.add(driverMarkers[id]);
-                    }
+                const pos = [data.lat, data.lon];
+                const status = data.status;
+
+                // Statusga qarab matnni o'zgartirish
+                const statusMap = {
+                    "coming": "🚕 Haydovchi sizga qarab kelmoqda",
+                    "arrived": "🏁 Haydovchi yetib keldi! Tashqariga chiqing.",
+                    "riding": "🚕 Safar davom etmoqda...",
+                    "finished": "✅ Safar yakunlandi. Rahmat!"
+                };
+                document.getElementById('status-text').innerText = statusMap[status] || "🚕 Haydovchi yo'lda";
+
+                // Mashina belgisini xaritaga qo'shish yoki yangilash
+                if (!driverMarker) {
+                    driverMarker = new ymaps.Placemark(pos, {
+                        hintContent: 'Haydovchi'
+                    }, {
+                        iconLayout: 'default#image',
+                        iconImageHref: 'https://cdn-icons-png.flaticon.com/512/741/741407.png', // Sariq mashina iconkasi
+                        iconImageSize: [40, 40],
+                        iconImageOffset: [-20, -20]
+                    });
+                    myMap.geoObjects.add(driverMarker);
+                } else {
+                    // Silliq harakatlanish uchun marker koordinatasini yangilaymiz
+                    driverMarker.geometry.setCoordinates(pos);
                 }
+
+                // Xaritani haydovchi markazida ushlab turish (ixtiyoriy)
+                myMap.setCenter(pos, myMap.getZoom(), { duration: 1000 });
             });
         }
     </script>
 </body>
 </html>
-
