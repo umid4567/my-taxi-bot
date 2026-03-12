@@ -104,28 +104,33 @@ function startTracking() {
     }, err => console.error(err), { enableHighAccuracy: true });
 }
 
-        function drawRoute(sLat, sLon, eLat, eLon) {
-    // 1. Agar eski yo'nalish bo'lsa, uni xaritadan butunlay o'chiramiz (Markerlari bilan birga)
-    if (multiRoute) {
-        myMap.geoObjects.remove(multiRoute);
-        multiRoute.destroy(); // Bu barcha eski markerlarni (A, B) tozalaydi
-        multiRoute = null;
+        function drawRoute(startLat, startLon, endLat, endLon) {
+    // 1. Agar avvalgi yo'nalish mavjud bo'lsa, uni xaritadan butunlay o'chiramiz
+    if (window.multiRoute) {
+        myMap.geoObjects.remove(window.multiRoute);
     }
 
-    // 2. Yangi yo'nalish chizamiz
-    multiRoute = new ymaps.multiRouter.MultiRoute({
-        referencePoints: [[sLat, sLon], [parseFloat(eLat), parseFloat(eLon)]],
+    // 2. Yangi yo'nalish ob'ektini yaratamiz
+    window.multiRoute = new ymaps.multiRouter.MultiRoute({
+        referencePoints: [
+            [startLat, startLon], 
+            [parseFloat(endLat), parseFloat(endLon)]
+        ],
         params: { routingMode: 'auto' }
     }, { 
-        boundsAutoApply: false, // Xarita har gal sakrab ketmasligi uchun
+        boundsAutoApply: false, 
         routeActiveStrokeColor: "#FFD700",
-        // Faqatgina yo'l chizig'i qolishi uchun markerlarni yashiramiz
+        routeActiveStrokeWidth: 5,
+        // --- ASOSIY QISM: Markerlarni (A va B) butunlay yashirish ---
         wayPointVisible: false, 
-        viaPointVisible: false
+        viaPointVisible: false,
+        pinVisible: false
     });
     
-    myMap.geoObjects.add(multiRoute);
+    // 3. Xaritaga yangi toza yo'nalishni qo'shamiz
+    myMap.geoObjects.add(window.multiRoute);
 }
+
 
 
 
