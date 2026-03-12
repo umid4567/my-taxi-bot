@@ -9,12 +9,12 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <script src="https://api-maps.yandex.ru/2.1/?lang=uz_UZ&apikey=087cbcce-d8e3-46e1-be82-29127bd69ae5" type="text/javascript"></script>
     <style>
-        body { margin: 0; padding: 0; font-family: sans-serif; background: #1a1a1a; color: white; }
+        body { margin: 0; padding: 0; font-family: sans-serif; background: #1a1a1a; color: white; overflow: hidden; }
         #map { width: 100%; height: 50vh; }
-        .taxi-panel { padding: 20px; text-align: center; background: #252525; border-top: 4px solid #FFD700; border-radius: 25px 25px 0 0; }
-        .price-display { font-size: 42px; font-weight: bold; color: #00FF00; margin: 10px 0; }
-        .distance-display { font-size: 18px; color: #aaa; }
-        .btn { width: 80%; padding: 15px; margin: 10px; border: none; border-radius: 12px; font-weight: bold; font-size: 18px; cursor: pointer; }
+        .taxi-panel { height: 50vh; padding: 20px; text-align: center; background: #252525; border-top: 4px solid #FFD700; border-radius: 25px 25px 0 0; box-sizing: border-box; }
+        .price-display { font-size: 48px; font-weight: bold; color: #00FF00; margin: 10px 0; }
+        .distance-display { font-size: 20px; color: #aaa; }
+        .btn { width: 90%; padding: 18px; margin: 10px; border: none; border-radius: 12px; font-weight: bold; font-size: 18px; cursor: pointer; text-transform: uppercase; }
         .btn-arrived { background: #ffc107; color: black; }
         .btn-start { background: #28a745; color: white; display: none; }
         .btn-finish { background: #dc3545; color: white; display: none; }
@@ -36,22 +36,27 @@
         const tg = window.Telegram.WebApp;
         tg.ready(); tg.expand();
 
-        let myMap, multiRoute, lastPos = null;
+        // Firebase sozlamalari
+        const config = { databaseURL: "https://umut-taxi-default-rtdb.europe-west1.firebasedatabase.app/" };
+        if (!firebase.apps.length) { firebase.initializeApp(config); }
+        const db = firebase.database();
+
+        let myMap, multiRoute, lastPos = null, watchId = null;
         let totalDist = 0;
         let isTripStarted = false;
 
-        // NARX SOZLAMALARI (O'zingizga moslang)
-        const START_PRICE = 5000; // Ochilish (minimal)
-        const PER_KM = 2500;    // 1 km uchun
+        const urlParams = new URLSearchParams(window.location.search);
+        const orderId = urlParams.get('order_id') || "trip_" + Date.now();
+        const clat = urlParams.get('clat'), clon = urlParams.get('clon');
 
         function init() {
             ymaps.ready(() => {
-                myMap = new ymaps.Map("map", { center: [39.997, 65.924], zoom: 15 });
+                myMap = new ymaps.Map("map", { 
+                    center: [39.997, 66.265], // Kattakurgan markazi
+                    zoom: 15,
+                    controls: ['zoomControl', 'geolocationControl']
+                });
                 startTracking();
-                
-                // Botdan kelgan mijoz koordinatalari
-                const urlParams = new URLSearchParams(window.location.search);
-                const clat = urlParams.get('clat'), clon = urlParams.get('clon');
                 if(clat && clon) drawRoute(clat, clon);
             });
         }
@@ -59,54 +64,74 @@
         function drawRoute(lat, lon) {
             navigator.geolocation.getCurrentPosition(p => {
                 multiRoute = new ymaps.multiRouter.MultiRoute({
-                    referencePoints: [[p.coords.latitude, p.coords.longitude], [lat, lon]],
+                    referencePoints: [[p.coords.latitude, p.coords.longitude], [parseFloat(lat), parseFloat(lon)]],
                     params: { routingMode: 'auto' }
-                }, { boundsAutoApply: true });
+                }, { boundsAutoApply: true, routeActiveStrokeColor: "#FFD700" });
                 myMap.geoObjects.add(multiRoute);
             });
         }
 
         function startTracking() {
-            navigator.geolocation.watchPosition(p => {
+            watchId = navigator.geolocation.watchPosition(p => {
                 const cur = { lat: p.coords.latitude, lon: p.coords.longitude };
+                
+                // Yo'lovchi ko'rishi uchun Firebase'ga yuborish
+                db.ref('trips/' + orderId).update({
+                    lat: cur.lat,
+                    lon: cur.lon,
+                    status: isTripStarted ? "riding" : "coming"
+                });
+
                 if (isTripStarted && lastPos) {
                     const d = ymaps.coordSystem.geo.getDistance([lastPos.lat, lastPos.lon], [cur.lat, cur.lon]);
                     totalDist += d;
                     updateUI();
                 }
                 lastPos = cur;
-            }, null, { enableHighAccuracy: true });
+            }, (err) => console.error(err), { enableHighAccuracy: true, distanceFilter: 5 });
         }
 
         function updateUI() {
             const km = totalDist / 1000;
-            const price = START_PRICE + (km * PER_KM);
+            const price = 5000 + (km * 2500); // 5000 start, 2500 har km
+            const finalPrice = Math.round(price / 500) * 500;
+            
             document.getElementById('km').innerText = km.toFixed(2);
-            document.getElementById('summa').innerText = Math.round(price / 500) * 500;
+            document.getElementById('summa').innerText = finalPrice;
+
+            // Yo'lovchi ekranida ham narx yangilanishi uchun
+            db.ref('trips/' + orderId).update({
+                km: km.toFixed(2),
+                price: finalPrice
+            });
         }
 
         function arrived() {
             document.getElementById('status').innerText = "🏁 Mijoz kutilmoqda";
             document.getElementById('btnArrived').style.display = 'none';
             document.getElementById('btnStart').style.display = 'inline-block';
-            if (multiRoute) myMap.geoObjects.remove(multiRoute); // Marshrutni o'chirish
+            if (multiRoute) myMap.geoObjects.remove(multiRoute);
+            db.ref('trips/' + orderId).update({ status: "arrived" });
         }
 
         function startTrip() {
             isTripStarted = true;
-            totalDist = 0; // Mijoz o'tirgandan keyin hisoblash boshlanadi
+            totalDist = 0;
             document.getElementById('status').innerText = "🚕 Safar davom etmoqda...";
             document.getElementById('btnStart').style.display = 'none';
             document.getElementById('btnFinish').style.display = 'inline-block';
+            db.ref('trips/' + orderId).update({ status: "started" });
         }
 
         function finishTrip() {
             const finalSum = document.getElementById('summa').innerText;
-            tg.sendData("finish_" + finalSum); // Botga yakuniy summani yuboradi
-            tg.close();
+            db.ref('trips/' + orderId).update({ status: "finished" });
+            tg.sendData("finish_" + finalSum);
+            setTimeout(() => tg.close(), 500);
         }
 
         window.onload = init;
     </script>
 </body>
 </html>
+
