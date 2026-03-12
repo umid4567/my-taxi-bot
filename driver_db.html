@@ -10,10 +10,11 @@
     
     <style>
         body { font-family: sans-serif; background: #121212; color: white; margin: 0; padding: 10px; text-align: center; }
-        .order-card { background: #1e1e1e; border: 2px solid #fbc02d; border-radius: 15px; padding: 20px; margin-top: 20px; display: none; box-shadow: 0 0 20px rgba(251, 192, 45, 0.2); }
-        .dist { font-size: 30px; color: #fbc02d; font-weight: bold; margin: 10px 0; }
-        .btn { width: 100%; padding: 18px; border: none; border-radius: 12px; margin-top: 10px; font-weight: bold; font-size: 18px; cursor: pointer; }
+        .order-card { background: #1e1e1e; border: 2px solid #fbc02d; border-radius: 15px; padding: 20px; margin-top: 20px; display: none; box-shadow: 0 0 20px rgba(251, 192, 45, 0.2); transition: 0.3s; }
+        .dist { font-size: 32px; color: #fbc02d; font-weight: bold; margin: 10px 0; }
+        .btn { width: 100%; padding: 18px; border: none; border-radius: 12px; margin-top: 10px; font-weight: bold; font-size: 18px; cursor: pointer; transition: 0.2s; }
         .btn-accept { background: #4caf50; color: white; }
+        .btn-accept:active { background: #388e3c; transform: scale(0.98); }
         .btn-reject { background: #f44336; color: white; }
         #waiting { margin-top: 50px; color: #777; font-size: 18px; }
         .hint { font-size: 12px; color: #555; margin-top: 20px; }
@@ -29,17 +30,14 @@
         <div id="clientName" style="font-size: 24px; font-weight: bold; margin: 10px 0;">Mijoz</div>
         <div class="dist"><span id="distance">---</span> km</div>
         <button class="btn btn-accept" onclick="acceptOrder()">✅ QABUL QILISH</button>
-        <button class="btn btn-reject" onclick="rejectOrder()">❌ RAD ETISH</button>
+        <button class="btn btn-reject" onclick="hideOrder()">❌ RAD ETISH</button>
     </div>
 
     <p class="hint">Eslatma: Ovozli signal ishlashi uchun ekranga bir marta bosib qo'ying.</p>
 
     <script>
-        // 1. Firebase Sozlamalari
         const firebaseConfig = { databaseURL: "https://umut-taxi-default-rtdb.europe-west1.firebasedatabase.app/" };
-        if (!firebase.apps.length) {
-            firebase.initializeApp(firebaseConfig);
-        }
+        if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
         const db = firebase.database();
         
         const urlParams = new URLSearchParams(window.location.search);
@@ -48,18 +46,13 @@
         let currentOrder = null;
         let myPos = null;
 
-        // 2. Joylashuvni doimiy kuzatish
+        // Joylashuvni kuzatish
         navigator.geolocation.watchPosition(p => {
             myPos = [p.coords.latitude, p.coords.longitude];
-            console.log("Mening joyim yangilandi:", myPos);
-            
-            // Agar ekranda buyurtma bo'lsa, masofani darrov yangilash
-            if (currentOrder) {
-                updateDistanceDisplay(currentOrder);
-            }
+            if (currentOrder) updateDistanceDisplay(currentOrder);
         }, err => console.error("Geolokatsiya xatosi:", err), { enableHighAccuracy: true });
 
-        // 3. Buyurtmalarni real-vaqtda kuzatish
+        // Buyurtmalarni real-vaqtda kuzatish
         db.ref('orders').on('value', (snapshot) => {
             const orders = snapshot.val();
             let foundOrder = false;
@@ -67,6 +60,7 @@
             if (orders) {
                 for (let key in orders) {
                     const order = orders[key];
+                    // Faqat 'waiting' statusidagi buyurtmalarni ko'rsatamiz
                     if (order.status === "waiting") {
                         currentOrder = { id: key, ...order };
                         showOrder(currentOrder);
@@ -84,18 +78,21 @@
             document.getElementById('clientName').innerText = order.name;
             
             const sound = document.getElementById('orderSound');
-            sound.play().catch(() => {});
+            sound.play().catch(e => console.log("Ovoz pleyerda xato:", e));
             
             updateDistanceDisplay(order);
         }
 
         function updateDistanceDisplay(order) {
+            // Yandex Maps tayyorligini tekshirish
             if (myPos && typeof ymaps !== 'undefined' && ymaps.coordSystem) {
-                const d = ymaps.coordSystem.geo.getDistance(myPos, [order.lat, order.lon]);
-                const km = (d / 1000).toFixed(1);
-                document.getElementById('distance').innerText = km;
-            } else {
-                document.getElementById('distance').innerText = "Aniqlanmoqda...";
+                try {
+                    const d = ymaps.coordSystem.geo.getDistance(myPos, [order.lat, order.lon]);
+                    const km = (d / 1000).toFixed(1);
+                    document.getElementById('distance').innerText = km;
+                } catch(e) {
+                    document.getElementById('distance').innerText = "---";
+                }
             }
         }
 
@@ -105,45 +102,34 @@
             currentOrder = null;
         }
 
-                function acceptOrder() {
-            if (!currentOrder || !currentOrder.id) {
-                alert("Xatolik: Buyurtma ma'lumotlari yuklanmadi.");
-                return;
-            }
+        function acceptOrder() {
+            if (!currentOrder || !currentOrder.id) return;
 
-            const oId = currentOrder.id; // Bu yerda mijozning Telegram ID-si bo'ladi
+            const oId = currentOrder.id;
             const oLat = currentOrder.lat;
             const oLon = currentOrder.lon;
 
-            // 1. Bazada tekshiramiz: zakaz hali ham "waiting"mi?
-            db.ref('orders/' + oId).once('value').then(snapshot => {
-                const orderData = snapshot.val();
-                
-                if (orderData && orderData.status === "waiting") {
-                    // 2. Statusni "accepted" qilamiz
-                    db.ref('orders/' + oId).update({
-                        status: "accepted",
-                        driver_id: driverId
-                    }).then(() => {
-                        // 3. XARITAGA O'TISH (ID ni aniq order_id qilib yuboramiz)
-                        // Bu yerda index.html yoniga ?order_id= qo'shilishi shart!
-                        const mapUrl = `index.html?order_id=${oId}&clat=${oLat}&clon=${oLon}`;
-                        
-                        console.log("Xaritaga yo'naltirilmoqda:", mapUrl);
-                        window.location.href = mapUrl;
-                        
-                    }).catch(err => {
-                        alert("Xatolik: " + err.message);
-                    });
+            // Buyurtmani band qilish (Race Condition oldini olish uchun)
+            db.ref('orders/' + oId).transaction((order) => {
+                if (order && order.status === "waiting") {
+                    order.status = "accepted";
+                    order.driver_id = driverId;
+                    order.client_notified = false; // main.py uchun signal
+                    return order;
+                }
+                return; // Agar kimdir ilib ketgan bo'lsa, hech narsa qilmaydi
+            }, (error, committed, snapshot) => {
+                if (committed) {
+                    // Muvaffaqiyatli qabul qilinsa, taksimetrga (index.html) yo'naltirish
+                    const mapUrl = `index.html?order_id=${oId}&clat=${oLat}&clon=${oLon}`;
+                    window.location.href = mapUrl;
                 } else {
                     alert("Kechirasiz, bu buyurtmani boshqa haydovchi qabul qilib bo'ldi! 🛑");
                     hideOrder();
                 }
             });
         }
-
-
-
     </script>
 </body>
 </html>
+
