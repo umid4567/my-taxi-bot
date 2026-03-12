@@ -101,14 +101,26 @@
         }
 
         function updateUI() {
-            const km = totalDist / 1000;
-            const price = 5000 + (km * 2500); // Start 5000 + km 2500
-            const finalPrice = Math.round(price / 500) * 500;
-            document.getElementById('km').innerText = km.toFixed(2);
-            document.getElementById('summa').innerText = finalPrice;
-            
-            if(orderId) db.ref('trips/' + orderId).update({ km: km.toFixed(2), price: finalPrice });
-        }
+    const km = totalDist / 1000; // Metrni KM ga o'tkazish
+    const startPrice = 5000;     // O'tirish narxi
+    const kmPrice = 2500;        // Har bir km uchun
+    
+    const price = startPrice + (km * kmPrice);
+    const finalPrice = Math.round(price / 500) * 500; // 500 so'mga yaxlitlash
+
+    // Ekranda ko'rsatish
+    document.getElementById('km').innerText = km.toFixed(2);
+    document.getElementById('summa').innerText = finalPrice;
+    
+    // FIREBASE GA YOZISH (Eng muhim joyi)
+    if(orderId) {
+        db.ref('orders/' + orderId).update({ 
+            km: km.toFixed(2), 
+            price: finalPrice 
+        });
+    }
+}
+
 
         function arrived() {
             document.getElementById('status').innerText = "🏁 Mijoz kutilmoqda";
