@@ -131,17 +131,35 @@ function startTracking() {
     myMap.geoObjects.add(window.multiRoute);
 }
 
+// 1. O'zgaruvchini funksiyadan tashqarida e'lon qilamiz
+let multiRoute = null;
 
+function drawRoute(sLat, sLon, eLat, eLon) {
+    const startCoords = [sLat, sLon];
+    const endCoords = [parseFloat(eLat), parseFloat(eLon)];
 
+    if (multiRoute) {
+        // 2. AGAR YO'NALISH BO'LSA: Uni o'chirib tashlamaymiz, 
+        // shunchaki yangi nuqtalarni beramiz. Bu markerlar ko'payishini oldini oladi.
+        multiRoute.model.setReferencePoints([startCoords, endCoords]);
+    } else {
+        // 3. AGAR YO'NALISH BO'LMASA: Birinchi marta yaratamiz
+        multiRoute = new ymaps.multiRouter.MultiRoute({
+            referencePoints: [startCoords, endCoords],
+            params: { routingMode: 'auto' }
+        }, {
+            boundsAutoApply: false,
+            routeActiveStrokeColor: "#FFD700",
+            routeActiveStrokeWidth: 5,
+            // Markerlarni butunlay o'chirish
+            wayPointVisible: false,
+            viaPointVisible: false,
+            pinVisible: false
+        });
+        myMap.geoObjects.add(multiRoute);
+    }
+}
 
-
-        function drawRoute(lat, lon) {
-            multiRoute = new ymaps.multiRouter.MultiRoute({
-                referencePoints: [[39.9469, 66.2625], [parseFloat(lat), parseFloat(lon)]],
-                params: { routingMode: 'auto' }
-            }, { boundsAutoApply: true, routeActiveStrokeColor: "#FFD700" });
-            myMap.geoObjects.add(multiRoute);
-        }
 
         function updateUI() {
             const km = totalDist / 1000;
