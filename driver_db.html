@@ -106,30 +106,32 @@
         }
 
         function acceptOrder() {
-            if (!currentOrder || !currentOrder.id) {
-                alert("Xatolik: Buyurtma ma'lumotlari yetarli emas.");
-                return;
-            }
+    if (!currentOrder || !currentOrder.id) return;
 
-            const oId = currentOrder.id;
-            const oLat = currentOrder.lat;
-            const oLon = currentOrder.lon;
+    const oId = currentOrder.id;
 
+    // 1. AVVAL TEKSHIRAMIZ: Zakaz hali ham bo'sh turibdimi?
+    db.ref('orders/' + oId).once('value').then(snapshot => {
+        const orderData = snapshot.val();
+        
+        if (orderData && orderData.status === "waiting") {
+            // 2. AGAR BO'SH BO'LSA - ENDI QABUL QILAMIZ
             db.ref('orders/' + oId).update({
                 status: "accepted",
                 driver_id: driverId
             }).then(() => {
-                // Xaritaga o'tish - URL'ni eng xavfsiz usulda yig'ish
-                const nextUrl = "index.html?order_id=" + oId + "&clat=" + oLat + "&clon=" + oLon;
-                window.location.href = nextUrl;
-            }).catch(err => {
-                alert("Bazaga yozishda xato: " + err.message);
+                window.location.href = "index.html?order_id=" + oId + 
+                                       "&clat=" + currentOrder.lat + 
+                                       "&clon=" + currentOrder.lon;
             });
-        }
-
-        function rejectOrder() {
+        } else {
+            // 3. AGAR BOSHQA HAYDOVCHI ILIB KETGAN BO'LSA
+            alert("Kechirasiz, bu buyurtmani boshqa haydovchi qabul qilib ulgurdi! 🛑");
             hideOrder();
         }
+    });
+}
+
     </script>
 </body>
 </html>
