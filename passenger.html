@@ -32,6 +32,9 @@
         <div id="p_info" style="margin-top: 10px; color: #333; font-weight: 500;">Ma'lumotlar olinmoqda...</div>
     </div>
 
+    <button id="btnCallDriver" style="display:none; width:100%; padding:15px; margin-top:10px; background:#28a745; color:white; border:none; border-radius:15px; font-weight:bold; font-size:16px;" onclick="callDriver()">📞 HAYDOVCHIGA QO'NG'IROQ</button>
+
+
     <script>
         const config = { databaseURL: "https://umut-taxi-default-rtdb.europe-west1.firebasedatabase.app/" };
         if (!firebase.apps.length) { firebase.initializeApp(config); }
