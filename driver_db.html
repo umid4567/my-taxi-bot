@@ -35,7 +35,7 @@
 
     <script>
         // 1. Firebase Sozlamalari
-                const config = { databaseURL: "https://umut-taxi-default-rtdb.europe-west1.firebasedatabase.app/" };
+                 config = { databaseURL: "https://umut-taxi-default-rtdb.europe-west1.firebasedatabase.app/" };
         firebase.initializeApp(config);
         const db = firebase.database();
         
@@ -45,41 +45,23 @@
         let currentOrder = null;
         let myPos = null;
 
-        // 1. HAYDOVCHINI KUZATISH (GPS DOIMIY YOQIQ)
-        if (navigator.geolocation) {
-            navigator.geolocation.watchPosition(p => {
-                myPos = [p.coords.latitude, p.coords.longitude];
-                console.log("Mening joyim yangilandi:", myPos);
+        // 2. Joylashuvni aniqlash
+        navigator.geolocation.watchPosition(p => {
+            myPos = [p.coords.latitude, p.coords.longitude];
+            console.log("Mening joyim:", myPos);
+        }, err => console.error("Geolokatsiya xatosi:", err));
 
-                // Haydovchining joyini bazada ham yangilab turamiz (agar kerak bo'lsa)
-                if (driverId !== "noma'lum") {
-                    db.ref('drivers/' + driverId).update({
-                        lat: myPos[0],
-                        lon: myPos[1],
-                        lastUpdate: new Date().getTime()
-                    });
-                }
-                
-                // Agar ekran ochiq bo'lsa, masofani qayta hisoblaymiz
-                if (currentOrder) {
-                    calculateRealDistance(currentOrder);
-                }
-            }, err => {
-                console.error("GPS xatosi:", err);
-            }, {
-                enableHighAccuracy: true,
-                maximumAge: 0
-            });
-        }
-
-        // 2. Buyurtmalarni kuzatish
+        // 3. Buyurtmalarni real-vaqtda kuzatish
         db.ref('orders').on('value', (snapshot) => {
             const orders = snapshot.val();
+            console.log("Bazadan ma'lumot keldi:", orders); // Tekshirish uchun
+            
             let foundOrder = false;
 
             if (orders) {
                 for (let key in orders) {
                     const order = orders[key];
+                    // Status aynan "waiting" bo'lishi kerak
                     if (order.status === "waiting") {
                         currentOrder = { id: key, ...order };
                         showOrder(currentOrder);
@@ -88,30 +70,37 @@
                     }
                 }
             }
-            if (!foundOrder) hideOrder();
-        });
+
+            if (!foundOrder) {
+                hideOrder();
+            }
+        }, err => console.error("Firebase o'qishda xato:", err));
 
         function showOrder(order) {
-            document.getElementById('waiting').style.display = 'none';
-            document.getElementById('orderBox').style.display = 'block';
-            document.getElementById('clientName').innerText = order.name;
-            
-            const sound = document.getElementById('orderSound');
-            sound.play().catch(() => {});
+    document.getElementById('waiting').style.display = 'none';
+    document.getElementById('orderBox').style.display = 'block';
+    document.getElementById('clientName').innerText = order.name;
+    
+    // Ovoz chiqarish
+    const sound = document.getElementById('orderSound');
+    sound.play().catch(() => {});
 
-            calculateRealDistance(order);
+    // Masofani qayta-qayta tekshirib hisoblash
+    const updateDistance = () => {
+        if (myPos && typeof ymaps !== 'undefined' && ymaps.coordSystem) {
+            const d = ymaps.coordSystem.geo.getDistance(myPos, [order.lat, order.lon]);
+            const km = (d / 1000).toFixed(1);
+            document.getElementById('distance').innerText = km;
+            console.log("Masofa yangilandi:", km);
+        } else {
+            document.getElementById('distance').innerText = "Aniqlanmoqda...";
+            // Agar koordinata hali kelmagan bo'lsa, 1 soniyadan keyin qayta urinib ko'radi
+            setTimeout(updateDistance, 1000);
         }
+    };
 
-        // MASOFANI HISOBLASH FUNKSIYASI
-        function calculateRealDistance(order) {
-            if (myPos && typeof ymaps !== 'undefined' && ymaps.coordSystem) {
-                const d = ymaps.coordSystem.geo.getDistance(myPos, [order.lat, order.lon]);
-                const km = (d / 1000).toFixed(1);
-                document.getElementById('distance').innerText = km;
-            } else {
-                document.getElementById('distance').innerText = "Aniqlanmoqda...";
-            }
-        }
+    updateDistance();
+}
 
         function hideOrder() {
             document.getElementById('waiting').style.display = 'block';
@@ -120,16 +109,28 @@
         }
 
         function acceptOrder() {
-            if (!currentOrder || !currentOrder.id) return;
-            
-            db.ref('orders/' + currentOrder.id).update({
-                status: "accepted",
-                driver_id: driverId
-            }).then(() => {
-                // Xaritaga o'tamiz
-                window.location.href = `index.html?order_id=${currentOrder.id}&clat=${currentOrder.lat}&clon=${currentOrder.lon}`;
-            });
-        }
+    // 1. Tekshiruv
+    if (!currentOrder || !currentOrder.id) {
+        alert("Xatolik: Buyurtma ma'lumotlari yuklanmadi. Iltimos, bir oz kuting.");
+        return;
+    } // <--- MANA SHU QAVS SIZDA TUSHIB QOLGAN!
+
+    const oId = currentOrder.id;
+    const oLat = currentOrder.lat;
+    const oLon = currentOrder.lon;
+
+    // 2. Bazada statusni o'zgartirish
+    db.ref('orders/' + oId).update({
+        status: "accepted",
+        driver_id: driverId
+    }).then(() => {
+        console.log("Zakaz qabul qilindi!");
+        // 3. Xaritaga o'tish
+        window.location.href = `index.html?order_id=${oId}&clat=${oLat}&clon=${oLon}`;
+    }).catch(err => {
+        alert("Bazaga yozishda xato: " + err.message);
+    });
+}
 
         function rejectOrder() {
             hideOrder();
