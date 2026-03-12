@@ -105,42 +105,43 @@
             currentOrder = null;
         }
 
-        function acceptOrder() {
-    if (!currentOrder || !currentOrder.id) {
-        alert("Xatolik: Buyurtma ma'lumotlari yuklanmadi. Iltimos, biroz kuting.");
-        return;
-    }
+                function acceptOrder() {
+            if (!currentOrder || !currentOrder.id) {
+                alert("Xatolik: Buyurtma ma'lumotlari yuklanmadi.");
+                return;
+            }
 
-    const oId = currentOrder.id;
-    const oLat = currentOrder.lat;
-    const oLon = currentOrder.lon;
+            const oId = currentOrder.id; // Bu yerda mijozning Telegram ID-si bo'ladi
+            const oLat = currentOrder.lat;
+            const oLon = currentOrder.lon;
 
-    // 1. Avval bazada tekshiramiz: zakaz hali ham bo'sh turibdimi?
-    db.ref('orders/' + oId).once('value').then(snapshot => {
-        const orderData = snapshot.val();
-        
-        if (orderData && orderData.status === "waiting") {
-            // 2. Statusni "accepted" ga o'zgartiramiz
-            db.ref('orders/' + oId).update({
-                status: "accepted",
-                driver_id: driverId
-            }).then(() => {
-                console.log("Muvaffaqiyatli qabul qilindi!");
+            // 1. Bazada tekshiramiz: zakaz hali ham "waiting"mi?
+            db.ref('orders/' + oId).once('value').then(snapshot => {
+                const orderData = snapshot.val();
                 
-                // 3. XARITAGA O'TISH (URL manzilini tekshiring)
-                // Diqqat: index.html fayli GitHub'da aynan shu nomda ekanligini tekshiring
-                const mapUrl = "index.html?order_id=" + oId + "&clat=" + oLat + "&clon=" + oLon;
-                window.location.href = mapUrl;
-                
-            }).catch(err => {
-                alert("Bazaga yozishda xato: " + err.message);
+                if (orderData && orderData.status === "waiting") {
+                    // 2. Statusni "accepted" qilamiz
+                    db.ref('orders/' + oId).update({
+                        status: "accepted",
+                        driver_id: driverId
+                    }).then(() => {
+                        // 3. XARITAGA O'TISH (ID ni aniq order_id qilib yuboramiz)
+                        // Bu yerda index.html yoniga ?order_id= qo'shilishi shart!
+                        const mapUrl = `index.html?order_id=${oId}&clat=${oLat}&clon=${oLon}`;
+                        
+                        console.log("Xaritaga yo'naltirilmoqda:", mapUrl);
+                        window.location.href = mapUrl;
+                        
+                    }).catch(err => {
+                        alert("Xatolik: " + err.message);
+                    });
+                } else {
+                    alert("Kechirasiz, bu buyurtmani boshqa haydovchi qabul qilib bo'ldi! 🛑");
+                    hideOrder();
+                }
             });
-        } else {
-            alert("Kechirasiz, bu buyurtmani boshqa haydovchi ilib ketdi! 🛑");
-            hideOrder();
         }
-    });
-}
+
 
 
     </script>
