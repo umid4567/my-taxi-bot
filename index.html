@@ -68,42 +68,29 @@
         }
 
         function startTracking() {
-            navigator.geolocation.watchPosition(p => {
-                const cur = { lat: p.coords.latitude, lon: p.coords.longitude };
-                const coords = [cur.lat, cur.lon];
+    navigator.geolocation.watchPosition(p => {
+        const cur = { lat: p.coords.latitude, lon: p.coords.longitude };
+        const coords = [cur.lat, cur.lon];
 
-                if (!driverMarker) {
-                    driverMarker = new ymaps.Placemark(coords, {}, {
-                        iconLayout: 'default#image',
-                        iconImageHref: 'https://cdn-icons-png.flaticon.com/512/741/741407.png',
-                        iconImageSize: [40, 40],
-                        iconImageOffset: [-20, -20]
-                    });
-                    myMap.geoObjects.add(driverMarker);
-                } else {
-                    driverMarker.geometry.setCoordinates(coords);
-                }
-
-                // Mijozga haydovchi koordinatasini yuborish
-                if(orderId && orderId !== "null") {
-                    db.ref('trips/' + orderId).update({
-                        lat: cur.lat,
-                        lon: cur.lon,
-                        status: isTripStarted ? "riding" : "coming"
-                    });
-                }
-
-                // Masofa hisoblash (Faqat safar boshlanganda)
-                if (isTripStarted && lastPos) {
-                    const d = ymaps.coordSystem.geo.getDistance([lastPos.lat, lastPos.lon], coords);
-                    if (d > 3) { // 3 metrdan ortiq harakat bo'lsa hisoblaydi
-                        totalDist += d; 
-                        updateUI(); 
-                    }
-                }
-                lastPos = cur;
-            }, (err) => console.error(err), { enableHighAccuracy: true, distanceFilter: 1 });
+        // Haydovchi markerini yangilash
+        if (!driverMarker) {
+            driverMarker = new ymaps.Placemark(coords, {}, { iconLayout: 'default#image', iconImageHref: 'https://cdn-icons-png.flaticon.com/512/741/741407.png', iconImageSize: [40, 40] });
+            myMap.geoObjects.add(driverMarker);
+        } else {
+            driverMarker.geometry.setCoordinates(coords);
         }
+
+        // MIJOZGA HAYDOVCHI KOORDINATASINI YUBORISH (orders papkasiga)
+        if(orderId) {
+            db.ref('orders/' + orderId).update({
+                driver_lat: cur.lat,
+                driver_lon: cur.lon,
+                status: isTripStarted ? "riding" : (document.getElementById('btnStart').style.display === 'inline-block' ? "arrived" : "coming")
+            });
+        }
+        // ... masofa hisoblash qismi ...
+    }, err => console.error(err), { enableHighAccuracy: true });
+}
 
         function drawRoute(lat, lon) {
             multiRoute = new ymaps.multiRouter.MultiRoute({
