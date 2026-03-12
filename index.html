@@ -36,12 +36,11 @@
         const tg = window.Telegram.WebApp;
         tg.ready(); tg.expand();
 
-        // Firebase sozlamalari
         const config = { databaseURL: "https://umut-taxi-default-rtdb.europe-west1.firebasedatabase.app/" };
         if (!firebase.apps.length) { firebase.initializeApp(config); }
         const db = firebase.database();
 
-        let myMap, multiRoute, lastPos = null, watchId = null;
+        let myMap, multiRoute, driverMarker = null, lastPos = null;
         let totalDist = 0;
         let isTripStarted = false;
 
@@ -52,13 +51,52 @@
         function init() {
             ymaps.ready(() => {
                 myMap = new ymaps.Map("map", { 
-                    center: [39.997, 66.265], // Kattakurgan markazi
+                    center: [39.997, 66.265], 
                     zoom: 15,
                     controls: ['zoomControl', 'geolocationControl']
                 });
+                
                 startTracking();
                 if(clat && clon) drawRoute(clat, clon);
             });
+        }
+
+        function startTracking() {
+            navigator.geolocation.watchPosition(p => {
+                const cur = { lat: p.coords.latitude, lon: p.coords.longitude };
+                const coords = [cur.lat, cur.lon];
+
+                // 1. Haydovchi belgisini (Marker) yangilash yoki yaratish
+                if (!driverMarker) {
+                    driverMarker = new ymaps.Placemark(coords, {
+                        hintContent: 'Sizning joyingiz'
+                    }, {
+                        iconLayout: 'default#image',
+                        iconImageHref: 'https://cdn-icons-png.flaticon.com/512/741/741407.png', // Mashina rasmi
+                        iconImageSize: [40, 40],
+                        iconImageOffset: [-20, -20]
+                    });
+                    myMap.geoObjects.add(driverMarker);
+                } else {
+                    driverMarker.geometry.setCoordinates(coords);
+                }
+
+                // 2. Firebase'ga yuborish (Mijoz kuzatishi uchun)
+                db.ref('trips/' + orderId).update({
+                    lat: cur.lat,
+                    lon: cur.lon,
+                    status: isTripStarted ? "riding" : "coming"
+                });
+
+                if (isTripStarted && lastPos) {
+                    const d = ymaps.coordSystem.geo.getDistance([lastPos.lat, lastPos.lon], coords);
+                    if (d > 5) { // 5 metrdan ortiq yursa hisoblaydi
+                        totalDist += d;
+                        updateUI();
+                    }
+                }
+                lastPos = cur;
+            }, (err) => console.error(err), { enableHighAccuracy: true });
         }
 
         function drawRoute(lat, lon) {
@@ -71,35 +109,14 @@
             });
         }
 
-        function startTracking() {
-            watchId = navigator.geolocation.watchPosition(p => {
-                const cur = { lat: p.coords.latitude, lon: p.coords.longitude };
-                
-                // Yo'lovchi ko'rishi uchun Firebase'ga yuborish
-                db.ref('trips/' + orderId).update({
-                    lat: cur.lat,
-                    lon: cur.lon,
-                    status: isTripStarted ? "riding" : "coming"
-                });
-
-                if (isTripStarted && lastPos) {
-                    const d = ymaps.coordSystem.geo.getDistance([lastPos.lat, lastPos.lon], [cur.lat, cur.lon]);
-                    totalDist += d;
-                    updateUI();
-                }
-                lastPos = cur;
-            }, (err) => console.error(err), { enableHighAccuracy: true, distanceFilter: 5 });
-        }
-
         function updateUI() {
             const km = totalDist / 1000;
-            const price = 5000 + (km * 2500); // 5000 start, 2500 har km
+            const price = 5000 + (km * 2500); 
             const finalPrice = Math.round(price / 500) * 500;
             
             document.getElementById('km').innerText = km.toFixed(2);
             document.getElementById('summa').innerText = finalPrice;
 
-            // Yo'lovchi ekranida ham narx yangilanishi uchun
             db.ref('trips/' + orderId).update({
                 km: km.toFixed(2),
                 price: finalPrice
@@ -134,4 +151,3 @@
     </script>
 </body>
 </html>
-
