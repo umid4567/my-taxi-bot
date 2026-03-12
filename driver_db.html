@@ -99,28 +99,29 @@
         }
 
         function acceptOrder() {
-    // 1. Agar biron sabab bilan currentOrder bo'sh bo'lsa, xato bermasligi uchun tekshiramiz
+    // 1. Tekshiruv
     if (!currentOrder || !currentOrder.id) {
         alert("Xatolik: Buyurtma ma'lumotlari yuklanmadi. Iltimos, bir oz kuting.");
         return;
-    }
+    } // <--- MANA SHU QAVS SIZDA TUSHIB QOLGAN!
 
     const oId = currentOrder.id;
     const oLat = currentOrder.lat;
     const oLon = currentOrder.lon;
 
-    // 2. Bazada zakaz statusini darrov o'zgartiramiz
+    // 2. Bazada statusni o'zgartirish
     db.ref('orders/' + oId).update({
         status: "accepted",
         driver_id: driverId
     }).then(() => {
         console.log("Zakaz qabul qilindi!");
-        // 3. Xaritaga o'tish (URLni aniq va xavfsiz qilib yuboramiz)
+        // 3. Xaritaga o'tish
         window.location.href = `index.html?order_id=${oId}&clat=${oLat}&clon=${oLon}`;
     }).catch(err => {
         alert("Bazaga yozishda xato: " + err.message);
     });
 }
+
 
 
         function rejectOrder() {
