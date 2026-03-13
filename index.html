@@ -7,42 +7,36 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
-    <script src="https://api-maps.yandex.ru/2.1/?lang=uz_UZ&apikey=087cbcce-d8e3-46e1-be82-29127bd69ae5" type="text/javascript"></script>
+    <script src="https://api-maps.yandex.ru/2.1/?lang=uz_UZ&apikey=087cbcce-d8e3-46e1-be82-29127bd69ae5&modules=multiRouter" type="text/javascript"></script>
     <style>
         body { margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; background: #1a1a1a; color: white; overflow: hidden; }
         #map { width: 100%; height: 45vh; background-color: #252525; }
         .taxi-panel { height: 55vh; padding: 15px; text-align: center; background: #252525; border-top: 4px solid #FFD700; border-radius: 25px 25px 0 0; box-sizing: border-box; }
         .price-display { font-size: 45px; font-weight: bold; color: #00FF00; margin: 5px 0; }
-        .distance-display { font-size: 18px; color: #aaa; margin-bottom: 5px; }
-        .btn { width: 95%; padding: 16px; margin: 5px 0; border: none; border-radius: 12px; font-weight: bold; font-size: 16px; cursor: pointer; text-transform: uppercase; transition: 0.2s; }
+        .distance-display { font-size: 18px; color: #aaa; }
+        .btn { width: 95%; padding: 16px; margin: 5px 0; border: none; border-radius: 12px; font-weight: bold; font-size: 16px; cursor: pointer; text-transform: uppercase; }
         .btn-arrived { background: #ffc107; color: black; }
         .btn-start { background: #28a745; color: white; display: none; }
         .btn-finish { background: #dc3545; color: white; display: none; }
-        .btn-call { background: #007bff; color: white; margin-top: 5px; }
-        .btn-cancel { background: #444; color: #bbb; font-size: 11px; padding: 8px; margin-top: 10px; }
     </style>
 </head>
 <body>
     <div id="map"></div>
     <div class="taxi-panel">
-        <div id="status" style="font-weight: bold; color: #FFD700;">🚕 Mijoz kutilmoqda...</div>
+        <div id="status" style="color: #FFD700;">🚕 Mijoz kutilmoqda...</div>
         <div class="distance-display"><span id="km">0.00</span> km</div>
         <div class="price-display"><span id="summa">5000</span> so'm</div>
         
         <button id="btnArrived" class="btn btn-arrived" onclick="arrived()">🏁 Keldim</button>
         <button id="btnStart" class="btn btn-start" onclick="startTrip()">🚀 Safarni boshlash</button>
-        <button id="btnFinish" class="btn btn-finish" onclick="finishTrip()">🏁 Safarni yakunlash</button>
-        
-        <button class="btn btn-call" onclick="callClient()">📞 MIJOZGA QO'NG'IROQ</button>
-        <button id="btnCancel" class="btn btn-cancel" onclick="cancelOrder()">❌ Buyurtmani bekor qilish</button>
+        <button id="btnFinish" class="btn btn-finish" onclick="finishTrip()">🏁 Yakunlash</button>
     </div>
 
     <script>
         const tg = window.Telegram.WebApp;
         tg.ready(); tg.expand();
 
-        const config = { databaseURL: "https://umut-taxi-default-rtdb.europe-west1.firebasedatabase.app/" };
-        if (!firebase.apps.length) { firebase.initializeApp(config); }
+        firebase.initializeApp({ databaseURL: "https://umut-taxi-default-rtdb.europe-west1.firebasedatabase.app/" });
         const db = firebase.database();
 
         const params = new URLSearchParams(window.location.search);
@@ -51,89 +45,47 @@
         const clat = parseFloat(params.get('clat'));
         const clon = parseFloat(params.get('clon'));
 
-        let myMap, driverMarker, clientMarker, lastPos = null, totalDist = 0, isTripStarted = false;
+        let myMap, driverMarker, route, isTripStarted = false, lastPos = null, totalDist = 0;
 
-                let route; // Marshrut o'zgaruvchisi
+        ymaps.ready(() => {
+            // Xaritani yaratish
+            myMap = new ymaps.Map("map", { 
+                center: [clat || 39.9, clon || 66.2], 
+                zoom: 14, 
+                controls: ['zoomControl', 'geolocationControl'] 
+            });
 
-        function init() {
-            ymaps.ready(['multiRouter'], () => {
-                myMap = new ymaps.Map("map", { 
-                    center: [clat || 39.9, clon || 66.2], 
-                    zoom: 15, controls: ['zoomControl', 'geolocationControl']
-                });
-
-                // 1. Haydovchi va Mijoz o'rtasida marshrut chizish
-                // Navigator orqali haydovchi joyini aniqlaymiz
-                navigator.geolocation.getCurrentPosition(p => {
-                    const driverPos = [p.coords.latitude, p.coords.longitude];
-                    const clientPos = [clat, clon];
+            // Marshrut chizish
+            if (clat && clon) {
+                navigator.geolocation.getCurrentPosition(pos => {
+                    const start = [pos.coords.latitude, pos.coords.longitude];
+                    const end = [clat, clon];
 
                     route = new ymaps.multiRouter.MultiRoute({
-                        referencePoints: [driverPos, clientPos],
-                        params: {
-                            routingMode: 'auto' // Mashina yo'li bo'ylab
-                        }
+                        referencePoints: [start, end],
+                        params: { routingMode: 'auto' }
                     }, {
-                        // Marshrut chizig'i rangi va ko'rinishi
-                        routeActiveStrokeWidth: 6,
-                        routeActiveStrokeColor: "#FFD700"
+                        routeActiveStrokeWidth: 5,
+                        routeActiveStrokeColor: "#FFD700",
+                        wayPointVisible: true // Mijoz nuqtasini ko'rsatadi
                     });
 
                     myMap.geoObjects.add(route);
+                }, err => {
+                    console.error("Geolokatsiya xatosi:", err);
+                    // Marshrut bo'lmasa ham mijozni marker bilan ko'rsatamiz
+                    const clientMarker = new ymaps.Placemark([clat, clon], {balloonContent: "Mijoz"}, {preset: 'islands#redDotIcon'});
+                    myMap.geoObjects.add(clientMarker);
                 });
-
-                acceptOrder();
-                startTracking();
-            });
-        }
-
-
-        function acceptOrder() {
-            if (!orderId || !driverUid) {
-                console.error("ID yoki Driver UID yetishmayapti!");
-                return;
             }
 
-            const orderRef = db.ref('orders/' + orderId);
-            
-            orderRef.transaction((currentData) => {
-                // 1. Agar buyurtma umuman mavjud bo'lmasa
-                if (currentData === null) return currentData;
-
-                // 2. Agar buyurtma yangi bo'lsa (waiting) - UNI QABUL QILISH
-                if (currentData.status === 'waiting') {
-                    currentData.status = 'accepted';
-                    currentData.driver_id = String(driverUid); // ID-ni matn ko'rinishida saqlash
-                    return currentData;
-                } 
-                
-                // 3. AGAR ALLAQACHON QABUL QILINGAN BO'LSA
-                // Tekshiramiz: qabul qilgan haydovchi hozirgi haydovchimi?
-                if (String(currentData.driver_id) === String(driverUid)) {
-                    // Agar bu o'zimiz bo'lsak, hech narsani o'zgartirmasdan davom etamiz
-                    return currentData; 
-                }
-
-                // 4. Agar boshqa haydovchi bo'lsa, tranzaksiyani bekor qilamiz
-                return; 
-            }, (error, committed) => {
-                if (error) {
-                    console.error("Tranzaksiya xatosi:", error);
-                } else if (!committed) {
-                    // Faqat haqiqatda boshqa odam olgan bo'lsa chiqadi
-                    alert("Kechirasiz, bu buyurtmani boshqa haydovchi qabul qilib bo'ldi!");
-                    tg.close();
-                } else {
-                    console.log("Muvaffaqiyatli qabul qilindi yoki davom etilmoqda.");
-                }
-            });
-        }
-
+            acceptOrder();
+            startTracking();
+        });
 
         function startTracking() {
             navigator.geolocation.watchPosition(p => {
                 const cur = [p.coords.latitude, p.coords.longitude];
-
                 if (!driverMarker) {
                     driverMarker = new ymaps.Placemark(cur, {}, { preset: 'islands#greenTaxiIcon' });
                     myMap.geoObjects.add(driverMarker);
@@ -143,16 +95,14 @@
 
                 if(orderId) db.ref('orders/' + orderId).update({ driver_lat: cur[0], driver_lon: cur[1] });
 
-                if (isTripStarted) {
-                    if (lastPos) {
-                        const d = ymaps.coordSystem.geo.getDistance(lastPos, cur);
-                        if (d > 2) { 
-                            totalDist += d;
-                            updateUI();
-                            lastPos = cur;
-                        }
-                    } else { lastPos = cur; }
-                }
+                if (isTripStarted && lastPos) {
+                    const d = ymaps.coordSystem.geo.getDistance(lastPos, cur);
+                    if (d > 2) { 
+                        totalDist += d;
+                        updateUI();
+                        lastPos = cur;
+                    }
+                } else { lastPos = cur; }
             }, null, { enableHighAccuracy: true });
         }
 
@@ -169,6 +119,8 @@
             document.getElementById('btnArrived').style.display = 'none';
             document.getElementById('btnStart').style.display = 'inline-block';
             if(orderId) db.ref('orders/' + orderId).update({ status: "arrived" });
+            // Mijozga borgach marshrutni o'chirib yuboramiz
+            if (route) myMap.geoObjects.remove(route);
         }
 
         function startTrip() {
@@ -185,27 +137,25 @@
             const total = document.getElementById('summa').innerText;
             if(orderId) {
                 db.ref('orders/' + orderId).update({ status: "finished" });
-                setTimeout(() => db.ref('orders/' + orderId).remove(), 3000);
+                setTimeout(() => db.ref('orders/' + orderId).remove(), 2000);
             }
             tg.sendData("finish_" + total);
             setTimeout(() => tg.close(), 500);
         }
 
-        function cancelOrder() {
-            if(confirm("Bekor qilinsinmi?")) {
-                db.ref('orders/' + orderId).update({ status: "waiting", driver_id: null }).then(() => tg.close());
-            }
-        }
-
-        function callClient() {
-            db.ref('users/' + orderId).once('value', s => {
-                const u = s.val();
-                if (u && u.phone) window.location.href = "tel:" + u.phone;
-                else alert("Raqam topilmadi!");
+        function acceptOrder() {
+            if (!orderId || !driverUid) return;
+            db.ref('orders/' + orderId).transaction((data) => {
+                if (data && (data.status === 'waiting' || String(data.driver_id) === String(driverUid))) {
+                    data.status = 'accepted';
+                    data.driver_id = String(driverUid);
+                    return data;
+                }
+                return;
+            }, (err, committed) => {
+                if (!committed) { alert("Xato: Buyurtma band!"); tg.close(); }
             });
         }
-
-        window.onload = init;
     </script>
 </body>
 </html>
