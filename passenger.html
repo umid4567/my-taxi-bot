@@ -10,9 +10,9 @@
     
     <style>
         body { font-family: 'Segoe UI', sans-serif; margin: 0; background: #f4f4f4; overflow: hidden; }
-        #map { width: 100%; height: 60vh; background: #e5e3db; } /* Balandlikni biroz kamaytirdik */
+        #map { width: 100%; height: 60vh; background: #e5e3db; }
         .card { 
-            position: fixed; bottom: 0; width: 100%; height: 40vh; /* Balandlikni biroz oshirdik tugma sig'ishi uchun */
+            position: fixed; bottom: 0; width: 100%; height: 40vh;
             background: white; padding: 20px; border-radius: 25px 25px 0 0; 
             box-shadow: 0 -10px 20px rgba(0,0,0,0.1); box-sizing: border-box; text-align: center;
         }
@@ -21,7 +21,6 @@
         .status-coming { background: #fff3e0; color: #ef6c00; }
         .status-arrived { background: #e3f2fd; color: #1565c0; }
         .status-riding { background: #e8f5e9; color: #2e7d32; }
-        /* Qo'ng'iroq tugmasi stili */
         #btnCallDriver { 
             display: none; width: 100%; padding: 15px; margin-top: 15px; 
             background: #28a745; color: white; border: none; border-radius: 15px; 
@@ -34,7 +33,7 @@
     <div class="card">
         <div id="status_badge" class="status-badge status-coming">KUTILMOQDA</div>
         <div style="color: #666; font-size: 14px;">To'lov:</div>
-        <div class="price"><span id="p_price">0</span> so'm</div>
+        <div class="price"><span id="p_price">5000</span> so'm</div>
         <div id="p_info" style="margin-top: 5px; color: #333; font-weight: 500;">Ma'lumotlar olinmoqda...</div>
         
         <button id="btnCallDriver" onclick="callDriver()">📞 HAYDOVCHIGA QO'NG'IROQ</button>
@@ -48,10 +47,14 @@
         const urlParams = new URLSearchParams(window.location.search);
         const orderId = urlParams.get('order_id');
 
-        let myMap, taxiMarker, driverPhone = null; // Raqam uchun o'zgaruvchi
+        let myMap, taxiMarker, clientMarker, driverPhone = null;
 
         ymaps.ready(() => {
-            myMap = new ymaps.Map("map", { center: [39.9469, 66.2625], zoom: 15, controls: ['zoomControl'] });
+            myMap = new ymaps.Map("map", { 
+                center: [39.9469, 66.2625], 
+                zoom: 15, 
+                controls: ['zoomControl', 'geolocationControl'] 
+            });
 
             if (!orderId) {
                 document.getElementById('p_info').innerText = "ID topilmadi!";
@@ -60,13 +63,18 @@
 
             db.ref('orders/' + orderId).on('value', (snapshot) => {
                 const data = snapshot.val();
-                if (!data) return;
+                if (!data) {
+                    document.getElementById('p_info').innerText = "Buyurtma yakunlandi";
+                    return;
+                }
 
-                document.getElementById('p_price').innerText = data.price ? data.price.toLocaleString() : "0";
+                // Pulni ko'rsatish
+                document.getElementById('p_price').innerText = data.price ? data.price : "5000";
 
                 const badge = document.getElementById('status_badge');
                 const info = document.getElementById('p_info');
 
+                // Statuslar boshqaruvi
                 if (data.status === "accepted" || data.status === "coming") {
                     badge.innerText = "🚕 Haydovchi kelyapti";
                     badge.className = "status-badge status-coming";
@@ -74,15 +82,48 @@
                 } else if (data.status === "arrived") {
                     badge.innerText = "🏁 Haydovchi keldi";
                     badge.className = "status-badge status-arrived";
-                    info.innerText = "Haydovchi yetib keldi";
+                    info.innerText = "Haydovchi yetib keldi, tashqariga chiqishingiz mumkin";
                 } else if (data.status === "riding") {
                     badge.innerText = "🚀 Safar davom etmoqda";
                     badge.className = "status-badge status-riding";
-                    info.innerText = (data.km || "0.0") + " km yo'l bosildi";
+                    info.innerText = (data.km || "0.00") + " km yo'l bosildi";
                 }
 
-                // --- QO'NG'IROQ MANTIQINI SHU YERGA QO'SHDIK ---
-                if (data.driver_id) {
+                // Mijozning o'z lokatsiyasini chizish (ko'k nuqta)
+                if (data.lat && data.lon) {
+                    const cPos = [parseFloat(data.lat), parseFloat(data.lon)];
+                    if (!clientMarker) {
+                        clientMarker = new ymaps.Placemark(cPos, { balloonContent: 'Sizning joyingiz' }, {
+                            preset: 'islands#blueCircleDotIconWithCaption'
+                        });
+                        myMap.geoObjects.add(clientMarker);
+                        myMap.setCenter(cPos); // Birinchi marta mijozga qaratadi
+                    }
+                }
+
+                // Haydovchi lokatsiyasini yangilash
+                if (data.driver_lat && data.driver_lon) {
+                    const dPos = [parseFloat(data.driver_lat), parseFloat(data.driver_lon)];
+                    if (!taxiMarker) {
+                        taxiMarker = new ymaps.Placemark(dPos, {}, {
+                            iconLayout: 'default#image',
+                            iconImageHref: 'https://cdn-icons-png.flaticon.com/512/741/741407.png',
+                            iconImageSize: [45, 45],
+                            iconImageOffset: [-22, -22]
+                        });
+                        myMap.geoObjects.add(taxiMarker);
+                    } else {
+                        taxiMarker.geometry.setCoordinates(dPos);
+                    }
+                    
+                    // Safar boshlanganda xaritani haydovchi bilan birga surish
+                    if (data.status === "riding") {
+                        myMap.panTo(dPos, { flying: true, duration: 1000 });
+                    }
+                }
+
+                // Haydovchi raqamini olish
+                if (data.driver_id && !driverPhone) {
                     db.ref('users/' + data.driver_id).once('value', (uSnap) => {
                         const uData = uSnap.val();
                         if (uData && uData.phone) {
@@ -91,25 +132,9 @@
                         }
                     });
                 }
-
-                if (data.driver_lat && data.driver_lon) {
-                    const pos = [data.driver_lat, data.driver_lon];
-                    if (!taxiMarker) {
-                        taxiMarker = new ymaps.Placemark(pos, {}, {
-                            iconLayout: 'default#image',
-                            iconImageHref: 'https://cdn-icons-png.flaticon.com/512/741/741407.png',
-                            iconImageSize: [40, 40]
-                        });
-                        myMap.geoObjects.add(taxiMarker);
-                    } else {
-                        taxiMarker.geometry.setCoordinates(pos);
-                    }
-                    myMap.panTo(pos, { flying: true, duration: 1000 });
-                }
             });
         });
 
-        // TUGMA BOSILGANDA ISHLAYDIGAN FUNKSIYA
         function callDriver() {
             if (driverPhone) {
                 window.location.href = "tel:" + driverPhone;
@@ -120,3 +145,4 @@
     </script>
 </body>
 </html>
+
