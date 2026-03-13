@@ -64,18 +64,44 @@
         }
 
         function acceptOrder() {
-            if (!orderId || !driverUid) return;
-            db.ref('orders/' + orderId).transaction((data) => {
-                if (data && (data.status === 'waiting' || data.driver_id === driverUid)) {
-                    data.status = 'accepted';
-                    data.driver_id = driverUid;
-                    return data;
-                }
-                return;
-            }, (err, committed) => {
-                if (!committed) { alert("Xatolik: Buyurtma allaqachon olingan!"); tg.close(); }
-            });
+    if (!orderId || !driverUid) {
+        console.error("ID yoki Driver UID yetishmayapti!");
+        return;
+    }
+
+    const orderRef = db.ref('orders/' + orderId);
+    
+    orderRef.transaction((currentData) => {
+        if (currentData === null) return currentData; // Buyurtma o'chirilgan bo'lsa
+
+        // 1. Agar buyurtma bo'sh bo'lsa (waiting) - UNI OLISH
+        if (currentData.status === 'waiting') {
+            currentData.status = 'accepted';
+            currentData.driver_id = driverUid;
+            return currentData;
+        } 
+        
+        // 2. Agar buyurtmani ALLAQACHON SHU HAYDOVCHI olgan bo'lsa - DAVOM ETISH
+        // Bu sahifa yangilanganda xato bermasligi uchun kerak
+        if (currentData.driver_id === driverUid) {
+            return currentData; 
         }
+
+        // 3. Agar boshqa haydovchi olgan bo'lsa - XATO QAYTARISH
+        return; 
+    }, (error, committed, snapshot) => {
+        if (error) {
+            console.error("Tranzaksiya xatosi:", error);
+        } else if (!committed) {
+            // Faqat buyurtma rostdan ham boshqa odamda bo'lsa ogohlantirish beradi
+            alert("Kechirasiz, bu buyurtmani boshqa haydovchi qabul qilib bo'ldi!");
+            tg.close();
+        } else {
+            console.log("Buyurtma muvaffaqiyatli qabul qilindi!");
+        }
+    });
+}
+
 
         function startTracking() {
             navigator.geolocation.watchPosition(p => {
