@@ -64,18 +64,44 @@
         }
 
         function acceptOrder() {
-            if (!orderId || !driverUid) return;
-            db.ref('orders/' + orderId).transaction((data) => {
-                if (data && (data.status === 'waiting' || data.driver_id === driverUid)) {
-                    data.status = 'accepted';
-                    data.driver_id = driverUid;
-                    return data;
-                }
-                return;
-            }, (err, committed) => {
-                if (!committed) { alert("Xato: Buyurtma band!"); tg.close(); }
-            });
+    if (!orderId || !driverUid) {
+        console.error("ID yetishmayapti!");
+        return;
+    }
+
+    const orderRef = db.ref('orders/' + orderId);
+    
+    orderRef.transaction((currentData) => {
+        if (currentData === null) return currentData;
+
+        // 1. Agar buyurtma yangi bo'lsa (waiting), uni olamiz
+        if (currentData.status === 'waiting') {
+            currentData.status = 'accepted';
+            currentData.driver_id = driverUid;
+            return currentData;
+        } 
+        
+        // 2. AGAR BUYURTMANI ALLAQACHON SHU HAYDOVCHI OLGAN BO'LSA
+        // Sahifa yangilanganda bu yerga tushadi va xato bermaydi
+        if (String(currentData.driver_id) === String(driverUid)) {
+            return currentData; 
         }
+
+        // 3. Agar boshqa odamda bo'lsa, tranzaksiyani to'xtatamiz
+        return; 
+    }, (error, committed) => {
+        if (error) {
+            console.error("Tranzaksiya xatosi:", error);
+        } else if (!committed) {
+            // Faqat rostdan ham begona odam bo'lsa xato chiqadi
+            alert("Kechirasiz, bu buyurtmani boshqa haydovchi qabul qilib bo'ldi!");
+            tg.close();
+        } else {
+            console.log("Muvaffaqiyatli kirildi!");
+        }
+    });
+}
+
 
         function startTracking() {
             navigator.geolocation.watchPosition(p => {
