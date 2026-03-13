@@ -9,32 +9,38 @@
     <script src="https://api-maps.yandex.ru/2.1/?lang=uz_UZ&apikey=087cbcce-d8e3-46e1-be82-29127bd69ae5" type="text/javascript"></script>
     
     <style>
-        body { font-family: 'Segoe UI', sans-serif; margin: 0; background: #f4f4f4; overflow: hidden; }
-        #map { width: 100%; height: 60vh; background: #e5e3db; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background: #f4f4f4; overflow: hidden; }
+        #map { width: 100%; height: 55vh; background: #e5e3db; }
         .card { 
-            position: fixed; bottom: 0; width: 100%; height: 40vh;
-            background: white; padding: 20px; border-radius: 25px 25px 0 0; 
-            box-shadow: 0 -10px 20px rgba(0,0,0,0.1); box-sizing: border-box; text-align: center;
+            position: fixed; bottom: 0; width: 100%; height: 45vh;
+            background: white; padding: 20px; border-radius: 30px 30px 0 0; 
+            box-shadow: 0 -10px 30px rgba(0,0,0,0.15); box-sizing: border-box; text-align: center;
+            z-index: 1000;
         }
-        .price { font-size: 36px; color: #28a745; font-weight: bold; margin: 5px 0; }
-        .status-badge { display: inline-block; padding: 6px 15px; border-radius: 20px; font-size: 12px; font-weight: bold; text-transform: uppercase; margin-bottom: 10px; }
-        .status-coming { background: #fff3e0; color: #ef6c00; }
-        .status-arrived { background: #e3f2fd; color: #1565c0; }
-        .status-riding { background: #e8f5e9; color: #2e7d32; }
+        .status-badge { display: inline-block; padding: 8px 20px; border-radius: 20px; font-size: 14px; font-weight: bold; text-transform: uppercase; margin-bottom: 15px; }
+        .status-coming { background: #FFF9C4; color: #FBC02D; }
+        .status-arrived { background: #E3F2FD; color: #1976D2; }
+        .status-riding { background: #E8F5E9; color: #388E3C; }
+        
+        .price-label { color: #888; font-size: 14px; margin-bottom: 5px; }
+        .price { font-size: 42px; color: #2E7D32; font-weight: 800; margin-bottom: 10px; }
+        
         #btnCallDriver { 
-            display: none; width: 100%; padding: 15px; margin-top: 15px; 
-            background: #28a745; color: white; border: none; border-radius: 15px; 
-            font-weight: bold; font-size: 16px; cursor: pointer;
+            display: none; /* Dastlab yashirin */
+            width: 100%; padding: 18px; background: #28a745; color: white; 
+            border: none; border-radius: 15px; font-weight: bold; font-size: 18px; 
+            cursor: pointer; transition: 0.3s; box-shadow: 0 4px 10px rgba(40, 167, 69, 0.3);
         }
+        #btnCallDriver:active { transform: scale(0.98); }
     </style>
 </head>
 <body>
     <div id="map"></div>
     <div class="card">
-        <div id="status_badge" class="status-badge status-coming">KUTILMOQDA</div>
-        <div style="color: #666; font-size: 14px;">To'lov:</div>
+        <div id="status_badge" class="status-badge status-coming">Haydovchi qidirilmoqda</div>
+        <div class="price-label">To'lov miqdori:</div>
         <div class="price"><span id="p_price">5000</span> so'm</div>
-        <div id="p_info" style="margin-top: 5px; color: #333; font-weight: 500;">Ma'lumotlar olinmoqda...</div>
+        <div id="p_info" style="color: #555; margin-bottom: 20px;">Haydovchi ma'lumotlari kutilmoqda...</div>
         
         <button id="btnCallDriver" onclick="callDriver()">📞 HAYDOVCHIGA QO'NG'IROQ</button>
     </div>
@@ -51,78 +57,43 @@
 
         ymaps.ready(() => {
             myMap = new ymaps.Map("map", { 
-                center: [39.9469, 66.2625], 
+                center: [39.9, 66.2], 
                 zoom: 15, 
-                controls: ['zoomControl', 'geolocationControl'] 
+                controls: ['zoomControl'] 
             });
 
             if (!orderId) {
-                document.getElementById('p_info').innerText = "ID topilmadi!";
+                alert("Buyurtma ID topilmadi!");
                 return;
             }
 
+            // Firebase-dan buyurtmani kuzatish
             db.ref('orders/' + orderId).on('value', (snapshot) => {
                 const data = snapshot.val();
-                if (!data) {
-                    document.getElementById('p_info').innerText = "Buyurtma yakunlandi";
-                    return;
-                }
+                if (!data) return;
 
-                // Pulni ko'rsatish
-                document.getElementById('p_price').innerText = data.price ? data.price : "5000";
+                // 1. Narxni yangilash
+                document.getElementById('p_price').innerText = data.price || "5000";
 
+                // 2. Statusni yangilash
                 const badge = document.getElementById('status_badge');
                 const info = document.getElementById('p_info');
 
-                // Statuslar boshqaruvi
                 if (data.status === "accepted" || data.status === "coming") {
                     badge.innerText = "🚕 Haydovchi kelyapti";
                     badge.className = "status-badge status-coming";
-                    info.innerText = "Haydovchi siz tomonga yo'lga chiqdi";
+                    info.innerText = "Haydovchi yo'lga chiqdi";
                 } else if (data.status === "arrived") {
                     badge.innerText = "🏁 Haydovchi keldi";
                     badge.className = "status-badge status-arrived";
-                    info.innerText = "Haydovchi yetib keldi, tashqariga chiqishingiz mumkin";
+                    info.innerText = "Mashina eshigingiz oldida";
                 } else if (data.status === "riding") {
                     badge.innerText = "🚀 Safar davom etmoqda";
                     badge.className = "status-badge status-riding";
-                    info.innerText = (data.km || "0.00") + " km yo'l bosildi";
+                    info.innerText = (data.km || "0.00") + " km bosib o'tildi";
                 }
 
-                // Mijozning o'z lokatsiyasini chizish (ko'k nuqta)
-                if (data.lat && data.lon) {
-                    const cPos = [parseFloat(data.lat), parseFloat(data.lon)];
-                    if (!clientMarker) {
-                        clientMarker = new ymaps.Placemark(cPos, { balloonContent: 'Sizning joyingiz' }, {
-                            preset: 'islands#blueCircleDotIconWithCaption'
-                        });
-                        myMap.geoObjects.add(clientMarker);
-                        myMap.setCenter(cPos); // Birinchi marta mijozga qaratadi
-                    }
-                }
-
-                // Haydovchi lokatsiyasini yangilash
-                if (data.driver_lat && data.driver_lon) {
-                    const dPos = [parseFloat(data.driver_lat), parseFloat(data.driver_lon)];
-                    if (!taxiMarker) {
-                        taxiMarker = new ymaps.Placemark(dPos, {}, {
-                            iconLayout: 'default#image',
-                            iconImageHref: 'https://cdn-icons-png.flaticon.com/512/741/741407.png',
-                            iconImageSize: [45, 45],
-                            iconImageOffset: [-22, -22]
-                        });
-                        myMap.geoObjects.add(taxiMarker);
-                    } else {
-                        taxiMarker.geometry.setCoordinates(dPos);
-                    }
-                    
-                    // Safar boshlanganda xaritani haydovchi bilan birga surish
-                    if (data.status === "riding") {
-                        myMap.panTo(dPos, { flying: true, duration: 1000 });
-                    }
-                }
-
-                // Haydovchi raqamini olish
+                // 3. Haydovchi raqamini olish va tugmani ko'rsatish
                 if (data.driver_id && !driverPhone) {
                     db.ref('users/' + data.driver_id).once('value', (uSnap) => {
                         const uData = uSnap.val();
@@ -132,6 +103,36 @@
                         }
                     });
                 }
+
+                // 4. Mijoz (Siz) nuqtasi
+                if (data.lat && data.lon) {
+                    const cPos = [parseFloat(data.lat), parseFloat(data.lon)];
+                    if (!clientMarker) {
+                        clientMarker = new ymaps.Placemark(cPos, {}, { preset: 'islands#blueCircleDotIcon' });
+                        myMap.geoObjects.add(clientMarker);
+                    }
+                }
+
+                // 5. Haydovchi nuqtasi (Taxi harakati)
+                if (data.driver_lat && data.driver_lon) {
+                    const dPos = [parseFloat(data.driver_lat), parseFloat(data.driver_lon)];
+                    if (!taxiMarker) {
+                        taxiMarker = new ymaps.Placemark(dPos, {}, {
+                            iconLayout: 'default#image',
+                            iconImageHref: 'https://cdn-icons-png.flaticon.com/512/741/741407.png',
+                            iconImageSize: [40, 40],
+                            iconImageOffset: [-20, -20]
+                        });
+                        myMap.geoObjects.add(taxiMarker);
+                    } else {
+                        taxiMarker.geometry.setCoordinates(dPos);
+                    }
+                    
+                    // Safar paytida xaritani haydovchi markazida ushlab turish
+                    if (data.status === "riding") {
+                        myMap.panTo(dPos, { flying: true });
+                    }
+                }
             });
         });
 
@@ -139,10 +140,9 @@
             if (driverPhone) {
                 window.location.href = "tel:" + driverPhone;
             } else {
-                alert("Haydovchi telefon raqami topilmadi!");
+                alert("Haydovchi raqami hali aniqlanmadi");
             }
         }
     </script>
 </body>
 </html>
-
