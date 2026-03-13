@@ -12,14 +12,14 @@
         body { margin: 0; padding: 0; font-family: sans-serif; background: #1a1a1a; color: white; overflow: hidden; }
         #map { width: 100%; height: 45vh; background-color: #252525; }
         .taxi-panel { height: 55vh; padding: 15px; text-align: center; background: #252525; border-top: 4px solid #FFD700; border-radius: 25px 25px 0 0; box-sizing: border-box; overflow-y: auto; }
-        .price-display { font-size: 40px; font-weight: bold; color: #00FF00; margin: 5px 0; }
-        .distance-display { font-size: 18px; color: #aaa; }
-        .btn { width: 95%; padding: 15px; margin: 5px 0; border: none; border-radius: 12px; font-weight: bold; font-size: 16px; cursor: pointer; text-transform: uppercase; }
+        .price-display { font-size: 45px; font-weight: bold; color: #00FF00; margin: 5px 0; }
+        .distance-display { font-size: 20px; color: #aaa; }
+        .btn { width: 95%; padding: 18px; margin: 8px 0; border: none; border-radius: 12px; font-weight: bold; font-size: 18px; cursor: pointer; text-transform: uppercase; }
         .btn-arrived { background: #ffc107; color: black; }
         .btn-start { background: #28a745; color: white; display: none; }
         .btn-finish { background: #dc3545; color: white; display: none; }
         .btn-call { background: #28a745; color: white; margin-top: 10px; }
-        .btn-cancel { background: #555; color: white; font-size: 12px; padding: 10px; margin-top: 15px; }
+        .btn-cancel { background: #444; color: #ccc; font-size: 12px; padding: 10px; margin-top: 15px; }
     </style>
 </head>
 <body>
@@ -34,7 +34,7 @@
         <button id="btnFinish" class="btn btn-finish" onclick="finishTrip()">🏁 Safarni yakunlash</button>
         
         <button class="btn btn-call" onclick="callClient()">📞 MIJOZGA QO'NG'IROQ</button>
-        <button id="btnCancel" class="btn btn-cancel" onclick="cancelOrder()">❌ Buyurtmani bekor qilish</button>
+        <button id="btnCancel" class="btn btn-cancel" onclick="cancelOrder()">❌ Bekor qilish</button>
     </div>
 
     <script>
@@ -50,13 +50,13 @@
         const driverUid = params.get('driver_id');
         const clat = params.get('clat'), clon = params.get('clon');
 
-        let myMap, driverMarker, lastPos, totalDist = 0, isTripStarted = false;
+        let myMap, driverMarker, lastPos = null, totalDist = 0, isTripStarted = false;
 
         function init() {
             ymaps.ready(() => {
                 myMap = new ymaps.Map("map", { 
                     center: [clat ? parseFloat(clat) : 39.9, clon ? parseFloat(clon) : 66.2], 
-                    zoom: 14, controls: ['zoomControl', 'geolocationControl']
+                    zoom: 15, controls: ['zoomControl', 'geolocationControl']
                 });
                 acceptOrder();
                 startTracking();
@@ -73,56 +73,61 @@
                 }
                 return;
             }, (err, committed) => {
-                if (!committed) { alert("Xatolik: Buyurtma allaqachon olingan!"); tg.close(); }
+                if (!committed) { alert("Xato: Buyurtma band!"); tg.close(); }
             });
         }
 
-                function startTracking() {
+        function startTracking() {
             navigator.geolocation.watchPosition(p => {
-                const lat = p.coords.latitude;
-                const lon = p.coords.longitude;
-                const coords = [lat, lon]; // Massiv shaklida
+                const curCoords = [p.coords.latitude, p.coords.longitude];
 
                 if (!driverMarker) {
-                    driverMarker = new ymaps.Placemark(coords, {}, { preset: 'islands#greenTaxiIcon' });
+                    driverMarker = new ymaps.Placemark(curCoords, {}, { preset: 'islands#greenTaxiIcon' });
                     myMap.geoObjects.add(driverMarker);
                 } else {
-                    driverMarker.geometry.setCoordinates(coords);
+                    driverMarker.geometry.setCoordinates(curCoords);
                 }
 
-                // Bazaga lokatsiyani yuborish
-                if(orderId) db.ref('orders/' + orderId).update({ driver_lat: lat, driver_lon: lon });
-                if(driverUid) db.ref('users/' + driverUid).update({ driver_lat: lat, driver_lon: lon });
+                // Mijozga lokatsiyani yuborish
+                if(orderId) db.ref('orders/' + orderId).update({ driver_lat: curCoords[0], driver_lon: curCoords[1] });
+                if(driverUid) db.ref('users/' + driverUid).update({ driver_lat: curCoords[0], driver_lon: curCoords[1] });
 
-                if (isTripStarted && lastPos) {
-                    // Masofani hisoblash
-                    const d = ymaps.coordSystem.geo.getDistance(lastPos, coords);
-                    
-                    // Agar haydovchi kamida 2 metr yursa (GPS xatoligini chetlab o'tish uchun)
-                    if (d > 2) { 
-                        totalDist += d;
-                        updateUI();
-                        lastPos = coords; // Faqat masofa oshgandagina oxirgi nuqtani yangilaymiz
+                // MASOFA HISOBLASH QISMI
+                if (isTripStarted) {
+                    if (lastPos) {
+                        const d = ymaps.coordSystem.geo.getDistance(lastPos, curCoords);
+                        if (d > 2) { // 2 metrdan ortiq yursa hisoblaydi
+                            totalDist += d;
+                            updateUI();
+                            lastPos = curCoords; // Nuqtani faqat siljiganda yangilaymiz
+                        }
+                    } else {
+                        lastPos = curCoords;
                     }
-                } else {
-                    lastPos = coords; // Safar boshlanishidan oldin ham nuqtani saqlab boramiz
                 }
-            }, err => {
-                console.error("GPS xatosi:", err);
-            }, { 
-                enableHighAccuracy: true, // Yuqori aniqlik
-                maximumAge: 0,            // Keshdan olmaslik
-                timeout: 5000             // 5 soniya kutish
+            }, err => console.error(err), { 
+                enableHighAccuracy: true, 
+                maximumAge: 0, 
+                timeout: 10000 
             });
         }
-
 
         function updateUI() {
             const km = totalDist / 1000;
-            const price = Math.round((5000 + (km * 2500)) / 500) * 500;
+            // 5000 start + har km uchun 2500 so'm
+            const currentPrice = 5000 + (km * 2500);
+            // 500 so'mga yaxlitlash
+            const finalPrice = Math.round(currentPrice / 500) * 500;
+            
             document.getElementById('km').innerText = km.toFixed(2);
-            document.getElementById('summa').innerText = price;
-            if(orderId) db.ref('orders/' + orderId).update({ km: km.toFixed(2), price: price });
+            document.getElementById('summa').innerText = finalPrice;
+            
+            if(orderId) {
+                db.ref('orders/' + orderId).update({ 
+                    km: km.toFixed(2), 
+                    price: finalPrice 
+                });
+            }
         }
 
         function arrived() {
@@ -135,31 +140,33 @@
 
         function startTrip() {
             isTripStarted = true;
-            totalDist = 0;
+            totalDist = 0; 
+            lastPos = null; // Safar boshida nuqtani nolga tushiramiz
             document.getElementById('status').innerText = "🚀 Yo'lda...";
             document.getElementById('btnStart').style.display = 'none';
             document.getElementById('btnFinish').style.display = 'inline-block';
-            updateUI(); // Boshlang'ich 5000 ni yozish
             if(orderId) db.ref('orders/' + orderId).update({ status: "riding" });
+            updateUI();
         }
 
         function finishTrip() {
-            const finalSum = document.getElementById('summa').innerText;
+            const total = document.getElementById('summa').innerText;
             if(orderId) {
                 db.ref('orders/' + orderId).update({ status: "finished" });
                 setTimeout(() => { db.ref('orders/' + orderId).remove(); }, 3000);
             }
-            tg.sendData("finish_" + finalSum);
+            tg.sendData("finish_" + total);
             setTimeout(() => tg.close(), 500);
         }
 
         function cancelOrder() {
-            if(confirm("Bekor qilinsinmi?")) {
+            if(confirm("Buyurtma bekor qilinsinmi?")) {
                 db.ref('orders/' + orderId).update({ status: "waiting", driver_id: null }).then(() => tg.close());
             }
         }
 
         function callClient() {
+            // orderId bu yerda mijozning ID si bo'lishi kerak
             db.ref('users/' + orderId).once('value', s => {
                 const u = s.val();
                 if (u && u.phone) window.location.href = "tel:" + u.phone;
@@ -171,3 +178,4 @@
     </script>
 </body>
 </html>
+
