@@ -53,25 +53,40 @@
 
         let myMap, driverMarker, clientMarker, lastPos = null, totalDist = 0, isTripStarted = false;
 
+                let route; // Marshrut o'zgaruvchisi
+
         function init() {
-            ymaps.ready(() => {
+            ymaps.ready(['multiRouter'], () => {
                 myMap = new ymaps.Map("map", { 
                     center: [clat || 39.9, clon || 66.2], 
                     zoom: 15, controls: ['zoomControl', 'geolocationControl']
                 });
 
-                // Mijoz turgan joyga marker qo'yish
-                if (clat && clon) {
-                    clientMarker = new ymaps.Placemark([clat, clon], { balloonContent: 'Mijoz shu yerda' }, {
-                        preset: 'islands#redDotIcon'
+                // 1. Haydovchi va Mijoz o'rtasida marshrut chizish
+                // Navigator orqali haydovchi joyini aniqlaymiz
+                navigator.geolocation.getCurrentPosition(p => {
+                    const driverPos = [p.coords.latitude, p.coords.longitude];
+                    const clientPos = [clat, clon];
+
+                    route = new ymaps.multiRouter.MultiRoute({
+                        referencePoints: [driverPos, clientPos],
+                        params: {
+                            routingMode: 'auto' // Mashina yo'li bo'ylab
+                        }
+                    }, {
+                        // Marshrut chizig'i rangi va ko'rinishi
+                        routeActiveStrokeWidth: 6,
+                        routeActiveStrokeColor: "#FFD700"
                     });
-                    myMap.geoObjects.add(clientMarker);
-                }
+
+                    myMap.geoObjects.add(route);
+                });
 
                 acceptOrder();
                 startTracking();
             });
         }
+
 
         function acceptOrder() {
             if (!orderId || !driverUid) {
