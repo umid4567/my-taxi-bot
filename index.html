@@ -74,18 +74,46 @@
         }
 
         function acceptOrder() {
-            if (!orderId || !driverUid) return;
-            db.ref('orders/' + orderId).transaction((data) => {
-                if (data && (data.status === 'waiting' || data.driver_id === driverUid)) {
-                    data.status = 'accepted';
-                    data.driver_id = driverUid;
-                    return data;
-                }
+            if (!orderId || !driverUid) {
+                console.error("ID yoki Driver UID yetishmayapti!");
                 return;
-            }, (err, committed) => {
-                if (!committed) { alert("Xato: Buyurtma band!"); tg.close(); }
+            }
+
+            const orderRef = db.ref('orders/' + orderId);
+            
+            orderRef.transaction((currentData) => {
+                // 1. Agar buyurtma umuman mavjud bo'lmasa
+                if (currentData === null) return currentData;
+
+                // 2. Agar buyurtma yangi bo'lsa (waiting) - UNI QABUL QILISH
+                if (currentData.status === 'waiting') {
+                    currentData.status = 'accepted';
+                    currentData.driver_id = String(driverUid); // ID-ni matn ko'rinishida saqlash
+                    return currentData;
+                } 
+                
+                // 3. AGAR ALLAQACHON QABUL QILINGAN BO'LSA
+                // Tekshiramiz: qabul qilgan haydovchi hozirgi haydovchimi?
+                if (String(currentData.driver_id) === String(driverUid)) {
+                    // Agar bu o'zimiz bo'lsak, hech narsani o'zgartirmasdan davom etamiz
+                    return currentData; 
+                }
+
+                // 4. Agar boshqa haydovchi bo'lsa, tranzaksiyani bekor qilamiz
+                return; 
+            }, (error, committed) => {
+                if (error) {
+                    console.error("Tranzaksiya xatosi:", error);
+                } else if (!committed) {
+                    // Faqat haqiqatda boshqa odam olgan bo'lsa chiqadi
+                    alert("Kechirasiz, bu buyurtmani boshqa haydovchi qabul qilib bo'ldi!");
+                    tg.close();
+                } else {
+                    console.log("Muvaffaqiyatli qabul qilindi yoki davom etilmoqda.");
+                }
             });
         }
+
 
         function startTracking() {
             navigator.geolocation.watchPosition(p => {
