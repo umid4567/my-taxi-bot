@@ -9,23 +9,23 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <script src="https://api-maps.yandex.ru/2.1/?lang=uz_UZ&apikey=087cbcce-d8e3-46e1-be82-29127bd69ae5" type="text/javascript"></script>
     <style>
-        body { margin: 0; padding: 0; font-family: sans-serif; background: #1a1a1a; color: white; overflow: hidden; }
+        body { margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; background: #1a1a1a; color: white; overflow: hidden; }
         #map { width: 100%; height: 45vh; background-color: #252525; }
-        .taxi-panel { height: 55vh; padding: 15px; text-align: center; background: #252525; border-top: 4px solid #FFD700; border-radius: 25px 25px 0 0; box-sizing: border-box; overflow-y: auto; }
+        .taxi-panel { height: 55vh; padding: 15px; text-align: center; background: #252525; border-top: 4px solid #FFD700; border-radius: 25px 25px 0 0; box-sizing: border-box; }
         .price-display { font-size: 45px; font-weight: bold; color: #00FF00; margin: 5px 0; }
-        .distance-display { font-size: 20px; color: #aaa; }
-        .btn { width: 95%; padding: 18px; margin: 8px 0; border: none; border-radius: 12px; font-weight: bold; font-size: 18px; cursor: pointer; text-transform: uppercase; }
+        .distance-display { font-size: 18px; color: #aaa; margin-bottom: 5px; }
+        .btn { width: 95%; padding: 16px; margin: 5px 0; border: none; border-radius: 12px; font-weight: bold; font-size: 16px; cursor: pointer; text-transform: uppercase; transition: 0.2s; }
         .btn-arrived { background: #ffc107; color: black; }
         .btn-start { background: #28a745; color: white; display: none; }
         .btn-finish { background: #dc3545; color: white; display: none; }
-        .btn-call { background: #28a745; color: white; margin-top: 10px; }
-        .btn-cancel { background: #444; color: #ccc; font-size: 12px; padding: 10px; margin-top: 15px; }
+        .btn-call { background: #007bff; color: white; margin-top: 5px; }
+        .btn-cancel { background: #444; color: #bbb; font-size: 11px; padding: 8px; margin-top: 10px; }
     </style>
 </head>
 <body>
     <div id="map"></div>
     <div class="taxi-panel">
-        <div id="status">🚕 Mijozga borilmoqda...</div>
+        <div id="status" style="font-weight: bold; color: #FFD700;">🚕 Mijoz kutilmoqda...</div>
         <div class="distance-display"><span id="km">0.00</span> km</div>
         <div class="price-display"><span id="summa">5000</span> so'm</div>
         
@@ -34,7 +34,7 @@
         <button id="btnFinish" class="btn btn-finish" onclick="finishTrip()">🏁 Safarni yakunlash</button>
         
         <button class="btn btn-call" onclick="callClient()">📞 MIJOZGA QO'NG'IROQ</button>
-        <button id="btnCancel" class="btn btn-cancel" onclick="cancelOrder()">❌ Bekor qilish</button>
+        <button id="btnCancel" class="btn btn-cancel" onclick="cancelOrder()">❌ Buyurtmani bekor qilish</button>
     </div>
 
     <script>
@@ -46,128 +46,91 @@
         const db = firebase.database();
 
         const params = new URLSearchParams(window.location.search);
-        const orderId = params.get('order_id') || params.get('id'); 
+        const orderId = params.get('order_id'); 
         const driverUid = params.get('driver_id');
-        const clat = params.get('clat'), clon = params.get('clon');
+        const clat = parseFloat(params.get('clat'));
+        const clon = parseFloat(params.get('clon'));
 
-        let myMap, driverMarker, lastPos = null, totalDist = 0, isTripStarted = false;
+        let myMap, driverMarker, clientMarker, lastPos = null, totalDist = 0, isTripStarted = false;
 
         function init() {
             ymaps.ready(() => {
                 myMap = new ymaps.Map("map", { 
-                    center: [clat ? parseFloat(clat) : 39.9, clon ? parseFloat(clon) : 66.2], 
+                    center: [clat || 39.9, clon || 66.2], 
                     zoom: 15, controls: ['zoomControl', 'geolocationControl']
                 });
+
+                // Mijoz turgan joyga marker qo'yish
+                if (clat && clon) {
+                    clientMarker = new ymaps.Placemark([clat, clon], { balloonContent: 'Mijoz shu yerda' }, {
+                        preset: 'islands#redDotIcon'
+                    });
+                    myMap.geoObjects.add(clientMarker);
+                }
+
                 acceptOrder();
                 startTracking();
             });
         }
 
         function acceptOrder() {
-    if (!orderId || !driverUid) {
-        console.error("ID yetishmayapti!");
-        return;
-    }
-
-    const orderRef = db.ref('orders/' + orderId);
-    
-    orderRef.transaction((currentData) => {
-        if (currentData === null) return currentData;
-
-        // 1. Agar buyurtma yangi bo'lsa (waiting), uni olamiz
-        if (currentData.status === 'waiting') {
-            currentData.status = 'accepted';
-            currentData.driver_id = driverUid;
-            return currentData;
-        } 
-        
-        // 2. AGAR BUYURTMANI ALLAQACHON SHU HAYDOVCHI OLGAN BO'LSA
-        // Sahifa yangilanganda bu yerga tushadi va xato bermaydi
-        if (String(currentData.driver_id) === String(driverUid)) {
-            return currentData; 
+            if (!orderId || !driverUid) return;
+            db.ref('orders/' + orderId).transaction((data) => {
+                if (data && (data.status === 'waiting' || data.driver_id === driverUid)) {
+                    data.status = 'accepted';
+                    data.driver_id = driverUid;
+                    return data;
+                }
+                return;
+            }, (err, committed) => {
+                if (!committed) { alert("Xato: Buyurtma band!"); tg.close(); }
+            });
         }
-
-        // 3. Agar boshqa odamda bo'lsa, tranzaksiyani to'xtatamiz
-        return; 
-    }, (error, committed) => {
-        if (error) {
-            console.error("Tranzaksiya xatosi:", error);
-        } else if (!committed) {
-            // Faqat rostdan ham begona odam bo'lsa xato chiqadi
-            alert("Kechirasiz, bu buyurtmani boshqa haydovchi qabul qilib bo'ldi!");
-            tg.close();
-        } else {
-            console.log("Muvaffaqiyatli kirildi!");
-        }
-    });
-}
-
 
         function startTracking() {
             navigator.geolocation.watchPosition(p => {
-                const curCoords = [p.coords.latitude, p.coords.longitude];
+                const cur = [p.coords.latitude, p.coords.longitude];
 
                 if (!driverMarker) {
-                    driverMarker = new ymaps.Placemark(curCoords, {}, { preset: 'islands#greenTaxiIcon' });
+                    driverMarker = new ymaps.Placemark(cur, {}, { preset: 'islands#greenTaxiIcon' });
                     myMap.geoObjects.add(driverMarker);
                 } else {
-                    driverMarker.geometry.setCoordinates(curCoords);
+                    driverMarker.geometry.setCoordinates(cur);
                 }
 
-                // Mijozga lokatsiyani yuborish
-                if(orderId) db.ref('orders/' + orderId).update({ driver_lat: curCoords[0], driver_lon: curCoords[1] });
-                if(driverUid) db.ref('users/' + driverUid).update({ driver_lat: curCoords[0], driver_lon: curCoords[1] });
+                if(orderId) db.ref('orders/' + orderId).update({ driver_lat: cur[0], driver_lon: cur[1] });
 
-                // MASOFA HISOBLASH QISMI
                 if (isTripStarted) {
                     if (lastPos) {
-                        const d = ymaps.coordSystem.geo.getDistance(lastPos, curCoords);
-                        if (d > 2) { // 2 metrdan ortiq yursa hisoblaydi
+                        const d = ymaps.coordSystem.geo.getDistance(lastPos, cur);
+                        if (d > 2) { 
                             totalDist += d;
                             updateUI();
-                            lastPos = curCoords; // Nuqtani faqat siljiganda yangilaymiz
+                            lastPos = cur;
                         }
-                    } else {
-                        lastPos = curCoords;
-                    }
+                    } else { lastPos = cur; }
                 }
-            }, err => console.error(err), { 
-                enableHighAccuracy: true, 
-                maximumAge: 0, 
-                timeout: 10000 
-            });
+            }, null, { enableHighAccuracy: true });
         }
 
         function updateUI() {
             const km = totalDist / 1000;
-            // 5000 start + har km uchun 2500 so'm
-            const currentPrice = 5000 + (km * 2500);
-            // 500 so'mga yaxlitlash
-            const finalPrice = Math.round(currentPrice / 500) * 500;
-            
+            const price = Math.round((5000 + (km * 2500)) / 500) * 500;
             document.getElementById('km').innerText = km.toFixed(2);
-            document.getElementById('summa').innerText = finalPrice;
-            
-            if(orderId) {
-                db.ref('orders/' + orderId).update({ 
-                    km: km.toFixed(2), 
-                    price: finalPrice 
-                });
-            }
+            document.getElementById('summa').innerText = price;
+            if(orderId) db.ref('orders/' + orderId).update({ km: km.toFixed(2), price: price });
         }
 
         function arrived() {
             document.getElementById('status').innerText = "🏁 Mijoz kutilmoqda";
             document.getElementById('btnArrived').style.display = 'none';
             document.getElementById('btnStart').style.display = 'inline-block';
-            document.getElementById('btnCancel').style.display = 'none';
             if(orderId) db.ref('orders/' + orderId).update({ status: "arrived" });
         }
 
         function startTrip() {
             isTripStarted = true;
-            totalDist = 0; 
-            lastPos = null; // Safar boshida nuqtani nolga tushiramiz
+            totalDist = 0; lastPos = null;
             document.getElementById('status').innerText = "🚀 Yo'lda...";
             document.getElementById('btnStart').style.display = 'none';
             document.getElementById('btnFinish').style.display = 'inline-block';
@@ -179,20 +142,19 @@
             const total = document.getElementById('summa').innerText;
             if(orderId) {
                 db.ref('orders/' + orderId).update({ status: "finished" });
-                setTimeout(() => { db.ref('orders/' + orderId).remove(); }, 3000);
+                setTimeout(() => db.ref('orders/' + orderId).remove(), 3000);
             }
             tg.sendData("finish_" + total);
             setTimeout(() => tg.close(), 500);
         }
 
         function cancelOrder() {
-            if(confirm("Buyurtma bekor qilinsinmi?")) {
+            if(confirm("Bekor qilinsinmi?")) {
                 db.ref('orders/' + orderId).update({ status: "waiting", driver_id: null }).then(() => tg.close());
             }
         }
 
         function callClient() {
-            // orderId bu yerda mijozning ID si bo'lishi kerak
             db.ref('users/' + orderId).once('value', s => {
                 const u = s.val();
                 if (u && u.phone) window.location.href = "tel:" + u.phone;
@@ -204,4 +166,3 @@
     </script>
 </body>
 </html>
-
