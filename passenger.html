@@ -26,7 +26,7 @@
         .price { font-size: 42px; color: #2E7D32; font-weight: 800; margin-bottom: 10px; }
         
         #btnCallDriver { 
-            display: none; /* Dastlab yashirin */
+            display: none; 
             width: 100%; padding: 18px; background: #28a745; color: white; 
             border: none; border-radius: 15px; font-weight: bold; font-size: 18px; 
             cursor: pointer; transition: 0.3s; box-shadow: 0 4px 10px rgba(40, 167, 69, 0.3);
@@ -37,49 +37,57 @@
 <body>
     <div id="map"></div>
     <div class="card">
-        <div id="status_badge" class="status-badge status-coming">Haydovchi qidirilmoqda</div>
+        <div id="status_badge" class="status-badge status-coming">Bog'lanmoqda...</div>
         <div class="price-label">To'lov miqdori:</div>
         <div class="price"><span id="p_price">5000</span> so'm</div>
-        <div id="p_info" style="color: #555; margin-bottom: 20px;">Haydovchi ma'lumotlari kutilmoqda...</div>
+        <div id="p_info" style="color: #555; margin-bottom: 20px;">Ma'lumotlar yuklanmoqda...</div>
         
         <button id="btnCallDriver" onclick="callDriver()">📞 HAYDOVCHIGA QO'NG'IROQ</button>
     </div>
 
     <script>
+        // Firebase sozlamalari
         const config = { databaseURL: "https://umut-taxi-default-rtdb.europe-west1.firebasedatabase.app/" };
         if (!firebase.apps.length) { firebase.initializeApp(config); }
         const db = firebase.database();
 
+        // URL'dan buyurtma ID sini olish
         const urlParams = new URLSearchParams(window.location.search);
         const orderId = urlParams.get('order_id');
 
         let myMap, taxiMarker, clientMarker, driverPhone = null;
 
         ymaps.ready(() => {
-            myMap = new ymaps.Map("map", { 
-                center: [39.9, 66.2], 
-                zoom: 15, 
-                controls: ['zoomControl'] 
-            });
-
             if (!orderId) {
                 alert("Buyurtma ID topilmadi!");
                 return;
             }
 
-            // Firebase-dan buyurtmani kuzatish
+            // Firebase'dan real vaqtda ma'lumotlarni kuzatish
             db.ref('orders/' + orderId).on('value', (snapshot) => {
                 const data = snapshot.val();
                 if (!data) return;
 
+                // --- XARITANI DINAMIK YARATISH ---
+                if (!myMap) {
+                    myMap = new ymaps.Map("map", { 
+                        center: [parseFloat(data.lat) || 39.9, parseFloat(data.lon) || 66.2], 
+                        zoom: 15, 
+                        controls: ['zoomControl'] 
+                    });
+                }
+
                 // 1. Narxni yangilash
                 document.getElementById('p_price').innerText = data.price || "5000";
 
-                // 2. Statusni yangilash
+                // 2. Status va ma'lumotlarni yangilash
                 const badge = document.getElementById('status_badge');
                 const info = document.getElementById('p_info');
 
-                if (data.status === "accepted" || data.status === "coming") {
+                if (data.status === "waiting") {
+                    badge.innerText = "🔍 Qidirilmoqda";
+                    info.innerText = "Haydovchi qidirilmoqda...";
+                } else if (data.status === "accepted" || data.status === "coming") {
                     badge.innerText = "🚕 Haydovchi kelyapti";
                     badge.className = "status-badge status-coming";
                     info.innerText = "Haydovchi yo'lga chiqdi";
@@ -93,7 +101,7 @@
                     info.innerText = (data.km || "0.00") + " km bosib o'tildi";
                 }
 
-                // 3. Haydovchi raqamini olish va tugmani ko'rsatish
+                // 3. Haydovchi raqamini olish
                 if (data.driver_id && !driverPhone) {
                     db.ref('users/' + data.driver_id).once('value', (uSnap) => {
                         const uData = uSnap.val();
@@ -104,11 +112,11 @@
                     });
                 }
 
-                // 4. Mijoz (Siz) nuqtasi
+                // 4. Mijoz (Siz) nuqtangiz
                 if (data.lat && data.lon) {
                     const cPos = [parseFloat(data.lat), parseFloat(data.lon)];
                     if (!clientMarker) {
-                        clientMarker = new ymaps.Placemark(cPos, {}, { preset: 'islands#blueCircleDotIcon' });
+                        clientMarker = new ymaps.Placemark(cPos, { balloonContent: 'Sizning joyingiz' }, { preset: 'islands#blueCircleDotIcon' });
                         myMap.geoObjects.add(clientMarker);
                     }
                 }
@@ -119,7 +127,7 @@
                     if (!taxiMarker) {
                         taxiMarker = new ymaps.Placemark(dPos, {}, {
                             iconLayout: 'default#image',
-                            iconImageHref: 'https://cdn-icons-png.flaticon.com/512/741/741407.png',
+                            iconImageHref: 'https://cdn-icons-png.flaticon.com/512/741/741407.png', // Taksi ikonka linki
                             iconImageSize: [40, 40],
                             iconImageOffset: [-20, -20]
                         });
@@ -128,14 +136,15 @@
                         taxiMarker.geometry.setCoordinates(dPos);
                     }
                     
-                    // Safar paytida xaritani haydovchi markazida ushlab turish
-                    if (data.status === "riding") {
+                    // Safar paytida yoki haydovchi kelayotganda xaritani unga qaratish
+                    if (data.status === "riding" || data.status === "coming") {
                         myMap.panTo(dPos, { flying: true });
                     }
                 }
             });
         });
 
+        // Telefon qilish funksiyasi
         function callDriver() {
             if (driverPhone) {
                 window.location.href = "tel:" + driverPhone;
