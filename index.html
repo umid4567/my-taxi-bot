@@ -9,12 +9,11 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <script src="https://api-maps.yandex.ru/2.1/?lang=uz_UZ&apikey=087cbcce-d8e3-46e1-be82-29127bd69ae5&modules=multiRouter" type="text/javascript"></script>
     <style>
-        body { margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; background: #1a1a1a; color: white; overflow: hidden; }
+        body { margin: 0; padding: 0; font-family: sans-serif; background: #1a1a1a; color: white; overflow: hidden; }
         #map { width: 100%; height: 45vh; background-color: #252525; }
-        .taxi-panel { height: 55vh; padding: 15px; text-align: center; background: #252525; border-top: 4px solid #FFD700; border-radius: 25px 25px 0 0; box-sizing: border-box; }
-        .price-display { font-size: 45px; font-weight: bold; color: #00FF00; margin: 5px 0; }
-        .distance-display { font-size: 18px; color: #aaa; }
-        .btn { width: 95%; padding: 16px; margin: 5px 0; border: none; border-radius: 12px; font-weight: bold; font-size: 16px; cursor: pointer; text-transform: uppercase; }
+        .taxi-panel { height: 55vh; padding: 15px; text-align: center; background: #252525; border-top: 4px solid #FFD700; border-radius: 25px 25px 0 0; }
+        .price-display { font-size: 45px; font-weight: bold; color: #00FF00; margin: 10px 0; }
+        .btn { width: 95%; padding: 18px; margin: 5px 0; border: none; border-radius: 12px; font-weight: bold; font-size: 18px; cursor: pointer; text-transform: uppercase; }
         .btn-arrived { background: #ffc107; color: black; }
         .btn-start { background: #28a745; color: white; display: none; }
         .btn-finish { background: #dc3545; color: white; display: none; }
@@ -23,9 +22,9 @@
 <body>
     <div id="map"></div>
     <div class="taxi-panel">
-        <div id="status" style="color: #FFD700;">🚕 Mijoz kutilmoqda...</div>
-        <div class="distance-display"><span id="km">0.00</span> km</div>
+        <div id="status" style="color: #FFD700;">🚕 Bog'lanmoqda...</div>
         <div class="price-display"><span id="summa">5000</span> so'm</div>
+        <div id="km_info" style="color: #aaa; margin-bottom: 10px;">0.00 km</div>
         
         <button id="btnArrived" class="btn btn-arrived" onclick="arrived()">🏁 Keldim</button>
         <button id="btnStart" class="btn btn-start" onclick="startTrip()">🚀 Safarni boshlash</button>
@@ -36,9 +35,12 @@
         const tg = window.Telegram.WebApp;
         tg.ready(); tg.expand();
 
-        firebase.initializeApp({ databaseURL: "https://umut-taxi-default-rtdb.europe-west1.firebasedatabase.app/" });
+        // FIREBASE ULANISH
+        const config = { databaseURL: "https://umut-taxi-default-rtdb.europe-west1.firebasedatabase.app/" };
+        if (!firebase.apps.length) firebase.initializeApp(config);
         const db = firebase.database();
 
+        // URL PARAMETRLARI
         const params = new URLSearchParams(window.location.search);
         const orderId = params.get('order_id'); 
         const driverUid = params.get('driver_id');
@@ -47,45 +49,64 @@
 
         let myMap, driverMarker, route, isTripStarted = false, lastPos = null, totalDist = 0;
 
+        // XARITANI ISHGA TUSHIRISH
         ymaps.ready(() => {
-            // Xaritani yaratish
             myMap = new ymaps.Map("map", { 
                 center: [clat || 39.9, clon || 66.2], 
-                zoom: 14, 
-                controls: ['zoomControl', 'geolocationControl'] 
+                zoom: 14, controls: ['zoomControl'] 
             });
 
             // Marshrut chizish
             if (clat && clon) {
                 navigator.geolocation.getCurrentPosition(pos => {
                     const start = [pos.coords.latitude, pos.coords.longitude];
-                    const end = [clat, clon];
-
                     route = new ymaps.multiRouter.MultiRoute({
-                        referencePoints: [start, end],
+                        referencePoints: [start, [clat, clon]],
                         params: { routingMode: 'auto' }
-                    }, {
-                        routeActiveStrokeWidth: 5,
-                        routeActiveStrokeColor: "#FFD700",
-                        wayPointVisible: true // Mijoz nuqtasini ko'rsatadi
-                    });
-
+                    }, { routeActiveStrokeColor: "#FFD700", routeActiveStrokeWidth: 5 });
                     myMap.geoObjects.add(route);
-                }, err => {
-                    console.error("Geolokatsiya xatosi:", err);
-                    // Marshrut bo'lmasa ham mijozni marker bilan ko'rsatamiz
-                    const clientMarker = new ymaps.Placemark([clat, clon], {balloonContent: "Mijoz"}, {preset: 'islands#redDotIcon'});
-                    myMap.geoObjects.add(clientMarker);
                 });
             }
 
-            acceptOrder();
+            checkAndAcceptOrder();
             startTracking();
         });
 
+        // ASOSIY FUNKSIYA: BUYURTMANI TEKSHIRISH
+        function checkAndAcceptOrder() {
+            if (!orderId || !driverUid) {
+                document.getElementById('status').innerText = "❌ ID XATOLIGI";
+                return;
+            }
+
+            const orderRef = db.ref('orders/' + orderId);
+            orderRef.once('value', (snapshot) => {
+                const data = snapshot.val();
+                if (!data) {
+                    alert("Buyurtma topilmadi!");
+                    tg.close();
+                    return;
+                }
+
+                // Agar buyurtma bo'sh bo'lsa yoki o'zingizniki bo'lsa
+                if (data.status === 'waiting' || String(data.driver_id) === String(driverUid)) {
+                    orderRef.update({
+                        status: (data.status === 'waiting') ? 'accepted' : data.status,
+                        driver_id: String(driverUid)
+                    });
+                    document.getElementById('status').innerText = "🚕 Mijozga borilmoqda";
+                } else {
+                    alert("Bu buyurtma allaqachon olingan!");
+                    tg.close();
+                }
+            });
+        }
+
+        // LOKATSIYANI KUZATISH
         function startTracking() {
             navigator.geolocation.watchPosition(p => {
                 const cur = [p.coords.latitude, p.coords.longitude];
+                
                 if (!driverMarker) {
                     driverMarker = new ymaps.Placemark(cur, {}, { preset: 'islands#greenTaxiIcon' });
                     myMap.geoObjects.add(driverMarker);
@@ -109,7 +130,7 @@
         function updateUI() {
             const km = totalDist / 1000;
             const price = Math.round((5000 + (km * 2500)) / 500) * 500;
-            document.getElementById('km').innerText = km.toFixed(2);
+            document.getElementById('km_info').innerText = km.toFixed(2) + " km";
             document.getElementById('summa').innerText = price;
             if(orderId) db.ref('orders/' + orderId).update({ km: km.toFixed(2), price: price });
         }
@@ -119,7 +140,6 @@
             document.getElementById('btnArrived').style.display = 'none';
             document.getElementById('btnStart').style.display = 'inline-block';
             if(orderId) db.ref('orders/' + orderId).update({ status: "arrived" });
-            // Mijozga borgach marshrutni o'chirib yuboramiz
             if (route) myMap.geoObjects.remove(route);
         }
 
@@ -130,56 +150,14 @@
             document.getElementById('btnStart').style.display = 'none';
             document.getElementById('btnFinish').style.display = 'inline-block';
             if(orderId) db.ref('orders/' + orderId).update({ status: "riding" });
-            updateUI();
         }
 
         function finishTrip() {
-            const total = document.getElementById('summa').innerText;
-            if(orderId) {
-                db.ref('orders/' + orderId).update({ status: "finished" });
-                setTimeout(() => db.ref('orders/' + orderId).remove(), 2000);
-            }
-            tg.sendData("finish_" + total);
+            const finalP = document.getElementById('summa').innerText;
+            if(orderId) db.ref('orders/' + orderId).update({ status: "finished" });
+            tg.sendData("finish_" + finalP);
             setTimeout(() => tg.close(), 500);
         }
-
-        function acceptOrder() {
-    if (!orderId || !driverUid) {
-        console.error("ID-lar yetishmayapti! URL-ni tekshiring.");
-        return;
-    }
-
-    const orderRef = db.ref('orders/' + orderId);
-    
-    // Tranzaksiyadan foydalanmay, to'g'ridan-to'g'ri tekshirish va yozish
-    orderRef.once('value').then((snapshot) => {
-        const data = snapshot.val();
-        
-        if (!data) {
-            alert("Xato: Buyurtma topilmadi!");
-            tg.close();
-            return;
-        }
-
-        // Agar buyurtma kutish holatida bo'lsa yoki uni ALLAQACHON SHU haydovchi olgan bo'lsa
-        if (data.status === 'waiting' || String(data.driver_id) === String(driverUid)) {
-            
-            // Ma'lumotlarni yangilash
-            orderRef.update({
-                status: (data.status === 'waiting') ? 'accepted' : data.status,
-                driver_id: String(driverUid)
-            }).then(() => {
-                console.log("Muvaffaqiyatli ulandi!");
-            });
-
-        } else {
-            // Agar boshqa haydovchi ID-si yozilgan bo'lsa
-            alert("Kechirasiz, bu buyurtmani boshqa haydovchi qabul qilib bo'ldi!");
-            tg.close();
-        }
-    });
-}
-
     </script>
 </body>
 </html>
