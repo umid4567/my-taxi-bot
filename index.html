@@ -144,18 +144,42 @@
         }
 
         function acceptOrder() {
-            if (!orderId || !driverUid) return;
-            db.ref('orders/' + orderId).transaction((data) => {
-                if (data && (data.status === 'waiting' || String(data.driver_id) === String(driverUid))) {
-                    data.status = 'accepted';
-                    data.driver_id = String(driverUid);
-                    return data;
-                }
-                return;
-            }, (err, committed) => {
-                if (!committed) { alert("Xato: Buyurtma band!"); tg.close(); }
-            });
+    if (!orderId || !driverUid) {
+        console.error("ID-lar yetishmayapti! URL-ni tekshiring.");
+        return;
+    }
+
+    const orderRef = db.ref('orders/' + orderId);
+    
+    // Tranzaksiyadan foydalanmay, to'g'ridan-to'g'ri tekshirish va yozish
+    orderRef.once('value').then((snapshot) => {
+        const data = snapshot.val();
+        
+        if (!data) {
+            alert("Xato: Buyurtma topilmadi!");
+            tg.close();
+            return;
         }
+
+        // Agar buyurtma kutish holatida bo'lsa yoki uni ALLAQACHON SHU haydovchi olgan bo'lsa
+        if (data.status === 'waiting' || String(data.driver_id) === String(driverUid)) {
+            
+            // Ma'lumotlarni yangilash
+            orderRef.update({
+                status: (data.status === 'waiting') ? 'accepted' : data.status,
+                driver_id: String(driverUid)
+            }).then(() => {
+                console.log("Muvaffaqiyatli ulandi!");
+            });
+
+        } else {
+            // Agar boshqa haydovchi ID-si yozilgan bo'lsa
+            alert("Kechirasiz, bu buyurtmani boshqa haydovchi qabul qilib bo'ldi!");
+            tg.close();
+        }
+    });
+}
+
     </script>
 </body>
 </html>
