@@ -27,11 +27,11 @@
     <div class="taxi-panel">
         <div id="status">🚕 Mijozga borilmoqda...</div>
         <div class="distance-display"><span id="km">0.00</span> km</div>
-        <div class="price-display"><span id="summa">0</span> so'm</div>
+        <div class="price-display"><span id="summa">5000</span> so'm</div>
         
         <button id="btnArrived" class="btn btn-arrived" onclick="arrived()">🏁 Keldim</button>
         <button id="btnStart" class="btn btn-start" onclick="startTrip()">🚀 Safarni boshlash</button>
-        <button id="btnFinish" class="btn btn-finish" onclick="finishTrip()">🏁 Safarni yakunlandi</button>
+        <button id="btnFinish" class="btn btn-finish" onclick="finishTrip()">🏁 Safarni yakunlash</button>
         
         <button class="btn btn-call" onclick="callClient()">📞 MIJOZGA QO'NG'IROQ</button>
         <button id="btnCancel" class="btn btn-cancel" onclick="cancelOrder()">❌ Buyurtmani bekor qilish</button>
@@ -39,8 +39,7 @@
 
     <script>
         const tg = window.Telegram.WebApp;
-        tg.ready();
-        tg.expand();
+        tg.ready(); tg.expand();
 
         const config = { databaseURL: "https://umut-taxi-default-rtdb.europe-west1.firebasedatabase.app/" };
         if (!firebase.apps.length) { firebase.initializeApp(config); }
@@ -49,210 +48,102 @@
         const params = new URLSearchParams(window.location.search);
         const orderId = params.get('order_id') || params.get('id'); 
         const driverUid = params.get('driver_id');
-        const clat = params.get('clat');
-        const clon = params.get('clon');
+        const clat = params.get('clat'), clon = params.get('clon');
 
-        let myMap, multiRoute = null, driverMarker = null, lastPos = null;
-        let totalDist = 0;
-        let isTripStarted = false;
+        let myMap, driverMarker, lastPos, totalDist = 0, isTripStarted = false;
 
         function init() {
             ymaps.ready(() => {
-                const startLat = clat ? parseFloat(clat) : 39.9469;
-                const startLon = clon ? parseFloat(clon) : 66.2625;
-
                 myMap = new ymaps.Map("map", { 
-                    center: [startLat, startLon], 
-                    zoom: 14,
-                    controls: ['zoomControl', 'geolocationControl']
+                    center: [clat ? parseFloat(clat) : 39.9, clon ? parseFloat(clon) : 66.2], 
+                    zoom: 14, controls: ['zoomControl', 'geolocationControl']
                 });
-                
-                acceptOrder(); // Oyna ochilishi bilan birinchi bo'lib qabul qilishni tekshiramiz
+                acceptOrder();
                 startTracking();
             });
         }
 
-        // --- 1. TRANSAKSIYA: FAQAT BITTA ODAM OLISHINI TA'MINLASH ---
         function acceptOrder() {
             if (!orderId || !driverUid) return;
-
-            const orderRef = db.ref('orders/' + orderId);
-            orderRef.transaction((currentData) => {
-                if (currentData === null) return currentData;
-                
-                // Agar buyurtma hali 'waiting' bo'lsa, uni band qilamiz
-                if (currentData.status === 'waiting') {
-                    currentData.status = 'accepted';
-                    currentData.driver_id = driverUid;
-                    return currentData;
-                } else if (currentData.driver_id === driverUid) {
-                    // Agar o'zi allaqachon olgan bo'lsa (sahifa yangilansa) davom etaveradi
-                    return currentData;
-                } else {
-                    return; // Kimdir olib bo'lgan bo'lsa to'xtatadi
+            db.ref('orders/' + orderId).transaction((data) => {
+                if (data && (data.status === 'waiting' || data.driver_id === driverUid)) {
+                    data.status = 'accepted';
+                    data.driver_id = driverUid;
+                    return data;
                 }
-            }, (error, committed, snapshot) => {
-                if (error) {
-                    alert("Xatolik: " + error);
-                } else if (!committed) {
-                    alert("Kechirasiz, bu buyurtmani boshqa haydovchi qabul qilib bo'ldi!");
-                    tg.close();
-                }
+                return;
+            }, (err, committed) => {
+                if (!committed) { alert("Xatolik: Buyurtma allaqachon olingan!"); tg.close(); }
             });
         }
 
         function startTracking() {
-    navigator.geolocation.watchPosition(p => {
-        const curLat = p.coords.latitude;
-        const curLon = p.coords.longitude;
-        const coords = [curLat, curLon];
+            navigator.geolocation.watchPosition(p => {
+                const coords = [p.coords.latitude, p.coords.longitude];
+                if (!driverMarker) {
+                    driverMarker = new ymaps.Placemark(coords, {}, { preset: 'islands#greenTaxiIcon' });
+                    myMap.geoObjects.add(driverMarker);
+                } else driverMarker.geometry.setCoordinates(coords);
 
-        // Haydovchi markerini yangilash
-        if (!driverMarker) {
-            driverMarker = new ymaps.Placemark(coords, {}, { 
-                iconLayout: 'default#image', 
-                iconImageHref: 'https://cdn-icons-png.flaticon.com/512/741/741407.png', 
-                iconImageSize: [40, 40],
-                iconImageOffset: [-20, -20]
-            });
-            myMap.geoObjects.add(driverMarker);
-        } else {
-            driverMarker.geometry.setCoordinates(coords);
-        }
+                // Mijoz uchun koordinatani yuborish
+                if(orderId) db.ref('orders/' + orderId).update({ driver_lat: coords[0], driver_lon: coords[1] });
+                if(driverUid) db.ref('users/' + driverUid).update({ driver_lat: coords[0], driver_lon: coords[1] });
 
-        // MUHIM: Har doim Firebase-ga koordinatani yozamiz (Mijoz ko'rishi uchun)
-        if(orderId) {
-            db.ref('orders/' + orderId).update({
-                driver_lat: curLat,
-                driver_lon: curLon
-            });
-        }
-
-        if (isTripStarted && lastPos) {
-            const d = ymaps.coordSystem.geo.getDistance([lastPos.lat, lastPos.lon], coords);
-            // Agar masofa hisoblanishida muammo bo'lsa, bu yerni tekshiring
-            if (d > 1) { // 2 metrni 1 metrga tushirdik
-                totalDist += d;
-                updateUI();
-            }
-        }
-        lastPos = { lat: curLat, lon: curLon };
-    }, err => console.error(err), { 
-        enableHighAccuracy: true, 
-        maximumAge: 1000, 
-        timeout: 5000 
-    });
-}
-
-function startTrip() {
-    isTripStarted = true;
-    totalDist = 0;
-    document.getElementById('status').innerText = "🚀 Safar davom etmoqda...";
-    document.getElementById('btnStart').style.display = 'none';
-    document.getElementById('btnFinish').style.display = 'inline-block';
-    
-    // Safar boshlanishi bilan boshlang'ich narxni ko'rsatish
-    updateUI(); 
-    
-    if(orderId) {
-        db.ref('orders/' + orderId).update({ 
-            status: "riding", 
-            km: "0.00", 
-            price: 5000 
-        });
-    }
-}
-
-
-        function drawRoute(sLat, sLon, eLat, eLon) {
-            const startCoords = [sLat, sLon];
-            const endCoords = [parseFloat(eLat), parseFloat(eLon)];
-            if (multiRoute) {
-                multiRoute.model.setReferencePoints([startCoords, endCoords]);
-            } else {
-                multiRoute = new ymaps.multiRouter.MultiRoute({
-                    referencePoints: [startCoords, endCoords],
-                    params: { routingMode: 'auto' }
-                }, {
-                    boundsAutoApply: false,
-                    routeActiveStrokeColor: "#FFD700",
-                    routeActiveStrokeWidth: 5,
-                    wayPointVisible: false,
-                    pinVisible: false
-                });
-                myMap.geoObjects.add(multiRoute);
-            }
+                if (isTripStarted && lastPos) {
+                    const d = ymaps.coordSystem.geo.getDistance(lastPos, coords);
+                    if (d > 1) { totalDist += d; updateUI(); }
+                }
+                lastPos = coords;
+            }, null, { enableHighAccuracy: true });
         }
 
         function updateUI() {
             const km = totalDist / 1000;
-            const startPrice = 5000; 
-            const kmPrice = 2500;    
-            const price = startPrice + (km * kmPrice);
-            const finalPrice = Math.round(price / 500) * 500;
+            const price = Math.round((5000 + (km * 2500)) / 500) * 500;
             document.getElementById('km').innerText = km.toFixed(2);
-            document.getElementById('summa').innerText = finalPrice;
-            if(orderId) {
-                db.ref('orders/' + orderId).update({ km: km.toFixed(2), price: finalPrice });
-            }
+            document.getElementById('summa').innerText = price;
+            if(orderId) db.ref('orders/' + orderId).update({ km: km.toFixed(2), price: price });
         }
 
         function arrived() {
             document.getElementById('status').innerText = "🏁 Mijoz kutilmoqda";
             document.getElementById('btnArrived').style.display = 'none';
             document.getElementById('btnStart').style.display = 'inline-block';
-            document.getElementById('btnCancel').style.display = 'none'; // Kelgandan keyin bekor qilib bo'lmaydi
-            if (multiRoute) {
-                myMap.geoObjects.remove(multiRoute);
-                multiRoute = null;
-            }
+            document.getElementById('btnCancel').style.display = 'none';
             if(orderId) db.ref('orders/' + orderId).update({ status: "arrived" });
         }
 
         function startTrip() {
             isTripStarted = true;
             totalDist = 0;
-            document.getElementById('status').innerText = "🚀 Safar davom etmoqda...";
+            document.getElementById('status').innerText = "🚀 Yo'lda...";
             document.getElementById('btnStart').style.display = 'none';
             document.getElementById('btnFinish').style.display = 'inline-block';
-            if(orderId) db.ref('orders/' + orderId).update({ status: "riding", km: "0.00", price: 5000 });
+            updateUI(); // Boshlang'ich 5000 ni yozish
+            if(orderId) db.ref('orders/' + orderId).update({ status: "riding" });
         }
 
         function finishTrip() {
             const finalSum = document.getElementById('summa').innerText;
             if(orderId) {
                 db.ref('orders/' + orderId).update({ status: "finished" });
-                setTimeout(() => { db.ref('orders/' + orderId).remove(); }, 5000);
+                setTimeout(() => { db.ref('orders/' + orderId).remove(); }, 3000);
             }
             tg.sendData("finish_" + finalSum);
             setTimeout(() => tg.close(), 500);
         }
 
-        // --- BEKOR QILISH FUNKSIYASI ---
         function cancelOrder() {
-            if(confirm("Haqiqatan ham buyurtmani bekor qilmoqchimisiz?")) {
-                if(orderId) {
-                    db.ref('orders/' + orderId).update({
-                        status: "waiting", // Boshqa haydovchilar uchun qayta ochamiz
-                        driver_id: null,
-                        driver_lat: null,
-                        driver_lon: null
-                    }).then(() => {
-                        tg.close();
-                    });
-                }
+            if(confirm("Bekor qilinsinmi?")) {
+                db.ref('orders/' + orderId).update({ status: "waiting", driver_id: null }).then(() => tg.close());
             }
         }
-        
+
         function callClient() {
-            if (!orderId) { alert("ID topilmadi!"); return; }
-            db.ref('users/' + orderId).once('value', (snapshot) => {
-                const userData = snapshot.val();
-                if (userData && userData.phone) {
-                    window.location.href = "tel:" + userData.phone;
-                } else {
-                    alert("Mijoz telefon raqami topilmadi!");
-                }
+            db.ref('users/' + orderId).once('value', s => {
+                const u = s.val();
+                if (u && u.phone) window.location.href = "tel:" + u.phone;
+                else alert("Raqam topilmadi!");
             });
         }
 
