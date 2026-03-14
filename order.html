@@ -114,27 +114,65 @@
 
         // Buyurtmani yuborish
         function placeOrder() {
-            const price = document.getElementById('estimated_price').innerText;
-            const address = document.getElementById('address').innerText;
-            const userId = tg.initDataUnsafe.user.id;
+    // 1. Elementlar mavjudligini tekshiramiz
+    const priceElement = document.getElementById('estimated_price');
+    const addressElement = document.getElementById('address');
 
-            const orderData = {
-                id: userId,
-                lat: startCoords[0],
-                lon: startCoords[1],
-                dest_lat: endCoords[0],
-                dest_lon: endCoords[1],
-                address: address,
-                price: price,
-                status: 'waiting',
-                time: new Date().toLocaleTimeString()
-            };
+    if (!priceElement || !addressElement) {
+        console.error("HTML elementlar topilmadi!");
+        return;
+    }
 
-            db.ref('orders/' + userId).set(orderData).then(() => {
+    const price = priceElement.innerText;
+    const address = addressElement.innerText;
+
+    // 2. Telegram foydalanuvchi ma'lumotlarini olish
+    if (!tg.initDataUnsafe || !tg.initDataUnsafe.user) {
+        alert("Telegram ma'lumotlari yuklanmadi!");
+        return;
+    }
+    const userId = tg.initDataUnsafe.user.id;
+
+    // 3. Koordinatalar tanlanganini tekshirish
+    if (typeof startCoords === 'undefined' || !startCoords || typeof endCoords === 'undefined' || !endCoords) {
+        alert("Iltimos, xaritadan yo'nalishni belgilang!");
+        return;
+    }
+
+    const orderData = {
+        id: userId,
+        lat: startCoords[0],
+        lon: startCoords[1],
+        dest_lat: endCoords[0],
+        dest_lon: endCoords[1],
+        address: address,
+        price: price,
+        status: 'waiting',
+        time: new Date().toLocaleTimeString(),
+        // Mijozning ismini ham qo'shib yuboramiz (haydovchiga ko'rinishi uchun)
+        name: tg.initDataUnsafe.user.first_name || "Mijoz"
+    };
+
+    // 4. Firebase-ga yozish
+    db.ref('orders/' + userId).set(orderData)
+        .then(() => {
+            console.log("Buyurtma saqlandi");
+            
+            // Xatolikni oldini olish uchun try-catch ichida yuboramiz
+            try {
                 tg.sendData("order_placed_" + price);
-                tg.close();
-            });
-        }
+            } catch (e) {
+                console.log("sendData faqat Keyboard tugmasida ishlaydi");
+            }
+            
+            // Web Appni yopish
+            tg.close();
+        })
+        .catch((error) => {
+            alert("Xatolik: " + error.message);
+        });
+}
+
     </script>
 </body>
 </html>
